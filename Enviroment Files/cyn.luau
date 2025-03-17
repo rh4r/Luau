@@ -23,6 +23,28 @@ function PlayerFunctions:ReturnHumanoid(char: Model)
     return char.Humanoid or char:FindFirstAncestorOfClass("Humanoid")
 end
 
+function PlayerFunctions:ReturnLocalHumanoid()
+    local LocalPlayer = PlayerFunctions:InitializeLocalPlayer()
+    local LocalChar = PlayerFunctions:ReturnChar(LocalPlayer)
+    local LocalHumanoid = PlayerFunctions:ReturnHumanoid(LocalChar)
+
+    return LocalHumanoid
+end
+
+function PlayerFunctions:ReturnLocalChar()
+    local LocalPlayer = PlayerFunctions:InitializeLocalPlayer()
+    local LocalChar = PlayerFunctions:ReturnChar(LocalPlayer)
+    
+    return LocalChar
+end
+
+function PlayerFunctions:ReturnLocalRoot()
+    local LocalPlayer = PlayerFunctions:InitializeLocalPlayer()
+    local LocalChar = PlayerFunctions:ReturnChar(LocalPlayer)
+    local LocalRoot = PlayerFunctions:ReturnRoot(LocalChar)
+    return LocalRoot
+end
+
 function OtherFunctions:ReturnClonedService(service: string)
     return cloneref(game:GetService(service))
 end
