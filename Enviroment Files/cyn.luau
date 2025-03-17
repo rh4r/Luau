@@ -1,3 +1,10 @@
+--[[
+	Name: Cyn (Cynthoni)
+	Description: This is a easily implimentible library which is used in my scripts for calling certain functions,
+		The main use of "Cyn" is to not have to constantly add return functions for instances like HumanoidRootPart and nil.Character
+			But Cyn also has implimentation of other convient functions and potentially more in the future.
+]]--
+
 local cyn = getgenv()
 
 cyn.OtherFunctions = {}
