@@ -4,7 +4,6 @@
 		The main use of "Cyn" is to not have to constantly add return functions for instances like HumanoidRootPart and nil.Character
 			But Cyn also has implimentation of other convient functions and potentially more in the future.
 ]]--
-
 local cyn = getgenv()
 
 cyn.OtherFunctions = {}
@@ -12,7 +11,7 @@ cyn.PlayerFunctions = {}
 
 local OtherFunctions = cyn.OtherFunctions
 local PlayerFunctions = cyn.PlayerFunctions
-local cloneref = cloneref or cyn.cloneref or function(...) return ... end
+local cloneref = cloneref or function(...) return ... end
 
 function PlayerFunctions:InitializeLocalPlayer()
     return cloneref(game:GetService("Players")).LocalPlayer
@@ -53,7 +52,14 @@ function PlayerFunctions:ReturnLocalRoot()
 end
 
 function OtherFunctions:ReturnClonedService(service: string)
-    return cloneref(game:GetService(service))
+    local CreatedService = nil
+    xpcall(function()
+        CreatedService = cloneref(game:GetService(service))
+    end,
+    function()
+        CreatedService = game:GetService(service)    
+    end)
+    return CreatedService
 end
 
 cyn.clear_output = function()
@@ -123,3 +129,11 @@ cyn.decompile = function(scriptpath)
         print(body)
     end
 end
+
+task.spawn(function()
+    local LP = PlayerFunctions:ReturnLocalHumanoid()
+
+    for a,b in getconnections(LP.Idled) do
+        b:Disconnect()
+    end
+end)
