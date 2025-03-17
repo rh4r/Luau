@@ -1,3 +1,8 @@
+--[[
+    Game Link: https://www.roblox.com/games/87039211657390/Arise-Crossover
+    Description: Auto Kill Aura for Arise Crossover alongside auto do the prompts "Arise" or "Destroy"
+]]--
+
 loadstring(game:HttpGet('https://raw.githubusercontent.com/rh4r/Luau/refs/heads/main/Enviroment%20Files/cyn.luau'))()
 
 local cyn = getgenv()
@@ -49,7 +54,7 @@ AutoKillAura = function()
 
     while Configs["EnableAura"] and task.wait() do
         local ClosestMob = nil
-        local ClosestRange = math.huge  -- Change to a number, not Vector3
+        local ClosestRange = math.huge
         local PlayerRoot = ReturnLocalRoot()
     
         for _, Mob in pairs(workspace.__Main.__Enemies.Client:GetChildren()) do
