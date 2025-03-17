@@ -94,14 +94,3 @@ cyn.decompile = function(scriptpath)
         print(body)
     end
 end
-
--- Enviroment Securing --
-
-setmetatable(cyn, {
-    __metatable = function()
-        return "You don't have permission to access this enviroment."
-    end,
-    __call = function()
-        return "You cannot call this table, please call a valid method."
-    end
-})
