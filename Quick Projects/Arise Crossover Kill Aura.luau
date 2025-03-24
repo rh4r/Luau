@@ -12,15 +12,16 @@ local cyn = getgenv()
 local PlayerFunctions = cyn.PlayerFunctions
 
 cyn.Configs = {
-    ["EnableMainFarm"] = true,
+    ["EnableNameFarm"] = false,
     ["EnableAura"] = false,
     ["EnablePetAura"] = false,
+    ["EnableLevelFarm"] = true,
     ["ProxPrompts"] = {
         ["AutoArise"] = true,
         ["AutoDestroy"] = false
     },
     ["EnemyChoices"] = {
-        ["Name"] = "LongIn",
+        ["Name"] = "Largalgan",
     }
 }
 
@@ -64,7 +65,8 @@ task.spawn(function()
 end)
 ]]--
 
-ReturnQueueFunc = function(env: ModuleScript)
+ReturnQueueFunc = function()
+    local env = require(ReplicatedStorage.BridgeNet2.src.Client.ClientProcess)
     for string_name, function_found in env do 
         if string_name == "addToQueue" then
             return function_found
@@ -110,6 +112,30 @@ ReturnHitDamage = function(PetName: string)
     end
 end
 
+ReturnRealNumber = function(Health: string) 
+    local match = string.match
+    local gsub = string.gsub
+    local FixedStr
+    local NewString
+
+    if match(Health, ".") then
+        FixedStr = gsub(Health, "%.", "")
+    end
+    Health = FixedStr
+
+    if match(Health, "K") then
+        NewString = gsub(Health, "K", "")
+
+        return tonumber(NewString) * 10
+    elseif match(Health, "M") then
+        NewString = gsub(Health, "M", "")
+
+        return tonumber(NewString) * 10000
+    else
+        return tonumber(Health)
+    end
+end
+
 AutoArise = function(PromptParent: Part)
     if PromptParent and PromptParent:FindFirstChild("ArisePrompt") then
         local ProxPrompt = PromptParent:FindFirstChild("ArisePrompt")
@@ -128,8 +154,7 @@ end
 
 AutoKillAura = function()
     while Configs["EnableAura"] and task.wait() do
-        local ModuleEnviroment = require(ReplicatedStorage.BridgeNet2.src.Client.ClientProcess)
-        local QueueFunc = ReturnQueueFunc(ModuleEnviroment)
+        local QueueFunc = ReturnQueueFunc()
         local ClosestMob = ReturnClosestInFolder(GameItems["Enemies"])
     
         if ClosestMob then
@@ -157,9 +182,7 @@ AutoPetAura = function()
     while Configs["EnablePetAura"] and task.wait() do
         local ClosestMob = ReturnClosestInFolder(GameItems["Enemies"])
         local LocalRoot = ReturnLocalRoot()
-        
-        local ModuleEnviroment = require(ReplicatedStorage.BridgeNet2.src.Client.ClientProcess)
-        local QueueFunc = ReturnQueueFunc(ModuleEnviroment)
+        local QueueFunc = ReturnQueueFunc()
         
         if ClosestMob and (ClosestMob.HumanoidRootPart.Position - LocalRoot.Position).Magnitude <= 50 then
             local MobRoot = ClosestMob.HumanoidRootPart
@@ -228,16 +251,19 @@ MergedAuras = function(Enemey: Model, LocalRoot: Part, QueueFunc: any)
     end)
 end
 
-MainAutoFarm = function()
-    local ModuleEnviroment = require(ReplicatedStorage.BridgeNet2.src.Client.ClientProcess)
-    local QueueFunc = ReturnQueueFunc(ModuleEnviroment)
+NamedAutoFarm = function()
+    local QueueFunc = ReturnQueueFunc()
 
-    while Configs["EnableMainFarm"] and task.wait() do
+    while Configs["EnableNameFarm"] and task.wait() do
         for Index, Enemy in pairs(GameItems["Enemies"]:GetChildren()) do
             if Enemy then
                 local EnemyName = ReturnNPCName(Enemy)
                 local LocalRoot = ReturnLocalRoot()
-                local MobRoot = Enemy:WaitForChild("HumanoidRootPart") or Enemy:WaitForChild("Hitbox")
+                local MobRoot = Enemy:FindFirstChild("HumanoidRootPart") or Enemy:FindFirstChild("Hitbox")
+                if not MobRoot then
+                    break
+                end
+                
     
                 if EnemyName == EnemyChoices["Name"] then
                     local CreatedTween = TweenService:Create(LocalRoot, TweenInfo.new(1), {CFrame = CFrame.new(MobRoot.Position - Vector3.new(-2, 0, 0))})
@@ -250,7 +276,7 @@ MainAutoFarm = function()
                     local StringSplit = string.split(Enemy:WaitForChild("HealthBar").Main.Bar.Amount.Text, " ")[1]
                     local MobHealth = tonumber(StringSplit)
                     
-                    while MobHealth ~= 0 and Configs["EnableMainFarm"] do
+                    while MobHealth ~= 0 and Configs["EnableNameFarm"] do
                         MobHealth = tonumber(string.split(Enemy:WaitForChild("HealthBar").Main.Bar.Amount.Text, " ")[1])
                         
                         task.wait(0.1)
@@ -264,6 +290,66 @@ MainAutoFarm = function()
                 end
             end
         end 
+    end
+end
+
+HighestLevelFarm = function()
+    while Configs["EnableLevelFarm"] and task.wait() do
+        local HighestLevel = 0
+        local HighestLevelMob = nil
+
+        for Index, Child in pairs(GameItems["Enemies"]:GetDescendants()) do
+            if Child:IsA("TextLabel") and Child.Name == "LevelText" and tonumber(Child.Text) > HighestLevel then
+                local SorryForThisShitThisIsNotCleanCodeAtAllBruhISwearImBetterThenThisManTsIsJustFuckedUp = Child:FindFirstAncestorOfClass("Model")
+                local HealthAmount = string.split(SorryForThisShitThisIsNotCleanCodeAtAllBruhISwearImBetterThenThisManTsIsJustFuckedUp:WaitForChild("HealthBar").Main.Bar.Amount.Text, " ", "")[1]
+                local MobHealth = ReturnRealNumber(HealthAmount)
+
+                if MobHealth > 0 then
+                    HighestLevelMob = Child:FindFirstAncestorOfClass("Model")
+                    HighestLevel = tonumber(Child.Text)
+                end
+            end
+        end
+        print'got pot mob'
+        if HighestLevelMob then
+            local LocalRoot = ReturnLocalRoot()
+            local QueueFunc = ReturnQueueFunc()
+
+            local MobRoot = HighestLevelMob:WaitForChild("HumanoidRootPart")
+            local HealthAmount = string.split(HighestLevelMob:WaitForChild("HealthBar").Main.Bar.Amount.Text, " ", "")[1]
+            local MobHealth = ReturnRealNumber(HealthAmount)
+
+            if not MobRoot then
+                HighestLevelMob = nil
+            end
+            if MobHealth <= 0 then
+                print'exiting loop'
+                HighestLevelMob = nil
+            end
+
+            local CreatedTween = TweenService:Create(LocalRoot, TweenInfo.new(1), {CFrame = CFrame.new(MobRoot.Position - Vector3.new(-2, 0, 0))})
+            CreatedTween:Play()
+            CreatedTween.Completed:Wait(0.5)
+
+            MergedAuras(HighestLevelMob, LocalRoot, QueueFunc)
+            task.wait()
+            
+            while MobHealth ~= 0 and Configs["EnableLevelFarm"] do
+                local UpdatedHpAmount = string.split(HighestLevelMob:WaitForChild("HealthBar").Main.Bar.Amount.Text, " ", "")[1]
+                MobHealth = ReturnRealNumber(UpdatedHpAmount)
+    
+                task.wait()
+            end
+
+            task.wait(0.1)
+
+            if ProxPrompts["AutoArise"] then
+                AutoArise(MobRoot)
+            elseif ProxPrompts["AutoDestroy"] then
+                AutoDestroy(MobRoot)
+            end
+            HighestLevelMob = nil
+        end
     end
 end
 
@@ -292,4 +378,4 @@ EquipBestPet = function()
     dataRemoteEvent:FireServer(unpack(BestPetsToSend))
 end
 
-EquipBestPet()
+HighestLevelFarm()
