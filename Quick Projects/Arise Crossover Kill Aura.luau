@@ -34,17 +34,21 @@ local EnemyChoices = Configs["EnemyChoices"]
 
 local insert = table.insert
 
+local LocalPlayer = PlayerFunctions:InitializeLocalPlayer()
+
 local TweenService = cloneref(game:GetService("TweenService")) or game:GetService("TweenService") -- the "or game:GetService("TweenService") is for VSC auto completetion.
 local ReplicatedStorage = cloneref(game:GetService("ReplicatedStorage"))
+local dataRemoteEvent = cloneref(ReplicatedStorage:WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"))
+local PetsFolder = LocalPlayer.leaderstats.Inventory.Pets
 
 local GameItems = {
     ["Enemies"] = workspace.__Main.__Enemies.Client,
 }
 
-local EnemyChoices = {}
+local WorldEnemies = {}
 -- workspace.__Main.__Enemies.Client["41aa95854381483eba3bf65b4a3874f5"].HealthBar.Main.Title
 
-task.spawn(function() for a,b in GameItems["Enemies"]:GetDescendants() do if b:IsA("TextLabel") and b.Parent.Parent.Name == "HealthBar" then insert(EnemyChoices, b.Text) end end end)
+task.spawn(function() for a,b in GameItems["Enemies"]:GetDescendants() do if b:IsA("TextLabel") and b.Parent.Parent.Name == "HealthBar" then insert(WorldEnemies, b.Text) end end end)
 task.spawn(function() for a,b in GameItems do rawset(GameItems, a, cloneref(b)) end end)
 
 -- Copy enemey names to clipboard
@@ -94,12 +98,24 @@ ReturnNPCName = function(NPC: Model)
     end
 end
 
+ReturnHitDamage = function(PetName: string)
+    for a,b in getgc(true) do
+        if type(b) == "table" and rawget(b, "HitDMG") then
+            if rawget(b, "Name") == PetName then
+                local HitDMG = rawget(b, "HitDMG")
+
+                return HitDMG
+            end
+        end
+    end
+end
+
 AutoArise = function(PromptParent: Part)
     if PromptParent and PromptParent:FindFirstChild("ArisePrompt") then
         local ProxPrompt = PromptParent:FindFirstChild("ArisePrompt")
         fireproximityprompt(ProxPrompt)
-        print'fired'
     end
+    task.wait(1)
 end
 
 AutoDestroy = function(PromptParent: Part)
@@ -107,6 +123,7 @@ AutoDestroy = function(PromptParent: Part)
         local ProxPrompt = PromptParent:FindFirstChild("DestroyPrompt")
         fireproximityprompt(ProxPrompt)
     end
+    task.wait(1)
 end
 
 AutoKillAura = function()
@@ -139,25 +156,30 @@ end
 AutoPetAura = function()
     while Configs["EnablePetAura"] and task.wait() do
         local ClosestMob = ReturnClosestInFolder(GameItems["Enemies"])
-        local LocalRoot = PlayerFunctions:ReturnLocalRoot()
+        local LocalRoot = ReturnLocalRoot()
         
         local ModuleEnviroment = require(ReplicatedStorage.BridgeNet2.src.Client.ClientProcess)
         local QueueFunc = ReturnQueueFunc(ModuleEnviroment)
         
         if ClosestMob and (ClosestMob.HumanoidRootPart.Position - LocalRoot.Position).Magnitude <= 50 then
             local MobRoot = ClosestMob.HumanoidRootPart
+
             local StringSplit = string.split(ClosestMob.HealthBar.Main.Bar.Amount.Text, " ")[1]
             local MobHealth = tonumber(StringSplit)
 
-            task.wait()
+            task.wait(0.01)
             QueueFunc("\7", {["PetPos"] = {},["AttackType"] = "All",["Event"] = "Attack",["Enemy"] = tostring(ClosestMob)})
-            task.wait()
+            task.wait(0.01)
+            print'ran'
 
             while MobHealth ~= 0 and (ClosestMob.HumanoidRootPart.Position - LocalRoot.Position).Magnitude <= 50 do
                 MobHealth = tonumber(string.split(ClosestMob.HealthBar.Main.Bar.Amount.Text, " ")[1])
 
                 task.wait()
+                print'awaiting'
             end
+
+            print'broken'
 
             if ProxPrompts["AutoArise"] then
                 AutoArise(MobRoot)
@@ -169,54 +191,71 @@ AutoPetAura = function()
     end
 end
 
+MergedAuras = function(Enemey: Model, LocalRoot: Part, QueueFunc: any)
+    pcall(function() 
+        local StringSplit = string.split(Enemey.HealthBar.Main.Bar.Amount.Text, " ")[1]
+        local MobHealth = tonumber(StringSplit)
+        local ConstructedArgs = {
+            [1] = {
+                ["Event"] = "PunchAttack",
+                ["Enemy"] = tostring(Enemey)
+            },
+            [2] = "\4"
+        }
+    
+        local PetArgs = {
+            [1] = {
+                [1] = {
+                    ["PetPos"] = {},
+                    ["AttackType"] = "All",
+                    ["Event"] = "Attack",
+                    ["Enemy"] = tostring(Enemey)
+                },
+                [2] = "\t"
+            }
+        }
+            
+        dataRemoteEvent:FireServer(unpack(PetArgs))
+    
+        task.wait()
+    
+        while Configs["EnableMainFarm"] and MobHealth ~= 0 and (Enemey:WaitForChild("HumanoidRootPart").Position - LocalRoot.Position).Magnitude <= 50 do
+            MobHealth = tonumber(string.split(Enemey:WaitForChild("HealthBar").Main.Bar.Amount.Text, " ")[1])
+    
+            QueueFunc(ConstructedArgs[2], ConstructedArgs[1]) 
+            task.wait(0.5)
+        end
+    end)
+end
+
 MainAutoFarm = function()
     local ModuleEnviroment = require(ReplicatedStorage.BridgeNet2.src.Client.ClientProcess)
     local QueueFunc = ReturnQueueFunc(ModuleEnviroment)
 
     while Configs["EnableMainFarm"] and task.wait() do
         for Index, Enemy in pairs(GameItems["Enemies"]:GetChildren()) do
-            if Enemy and Enemy.HumanoidRootPart then
+            if Enemy then
                 local EnemyName = ReturnNPCName(Enemy)
-                local LocalRoot = PlayerFunctions:ReturnLocalRoot()
-                local MobRoot = Enemy.HumanoidRootPart
-                local StringSplit = string.split(Enemy.HealthBar.Main.Bar.Amount.Text, " ")[1]
-                local MobHealth = tonumber(StringSplit)
+                local LocalRoot = ReturnLocalRoot()
+                local MobRoot = Enemy:WaitForChild("HumanoidRootPart") or Enemy:WaitForChild("Hitbox")
     
                 if EnemyName == EnemyChoices["Name"] then
-                    local CreatedTween = TweenService:Create(LocalRoot, TweenInfo.new(1), {CFrame = CFrame.new(MobRoot.Position)})
-        
+                    local CreatedTween = TweenService:Create(LocalRoot, TweenInfo.new(1), {CFrame = CFrame.new(MobRoot.Position - Vector3.new(-2, 0, 0))})
                     CreatedTween:Play()
-                    CreatedTween.Completed:Wait()
+                    CreatedTween.Completed:Wait(0.5)
 
-                    task.spawn(function()
-                        local ConstructedArgs = {
-                            [1] = {
-                                ["Event"] = "PunchAttack",
-                                ["Enemy"] = tostring(Enemy)
-                            },
-                            [2] = "\4"
-                        }
-                        while MobHealth ~= 0 and (Enemy.HumanoidRootPart.Position - LocalRoot.Position).Magnitude <= 50 do
-                            QueueFunc(ConstructedArgs[2], ConstructedArgs[1]) 
-                            task.wait()
-                        end
-                    end)
-    
-                    task.spawn(function()
-                        local StringSplit = string.split(Enemy.HealthBar.Main.Bar.Amount.Text, " ")[1]
-                        local MobHealth = tonumber(StringSplit)
-            
-                        task.wait()
-                        QueueFunc("\7", {["PetPos"] = {},["AttackType"] = "All",["Event"] = "Attack",["Enemy"] = tostring(Enemy)})
-                        task.wait()
-            
-                        while MobHealth ~= 0 and (Enemy.HumanoidRootPart.Position - LocalRoot.Position).Magnitude <= 50 do
-                            MobHealth = tonumber(string.split(Enemy.HealthBar.Main.Bar.Amount.Text, " ")[1])
-            
-                            task.wait()
-                        end
-                    end)
-        
+                    task.wait(1)
+                    MergedAuras(Enemy, LocalRoot, QueueFunc)                
+
+                    local StringSplit = string.split(Enemy:WaitForChild("HealthBar").Main.Bar.Amount.Text, " ")[1]
+                    local MobHealth = tonumber(StringSplit)
+                    
+                    while MobHealth ~= 0 and Configs["EnableMainFarm"] do
+                        MobHealth = tonumber(string.split(Enemy:WaitForChild("HealthBar").Main.Bar.Amount.Text, " ")[1])
+                        
+                        task.wait(0.1)
+                    end
+
                     if ProxPrompts["AutoArise"] then
                         AutoArise(MobRoot)
                     elseif ProxPrompts["AutoDestroy"] then
@@ -228,4 +267,29 @@ MainAutoFarm = function()
     end
 end
 
-MainAutoFarm()
+EquipBestPet = function()       
+    local Children = PetsFolder:GetChildren()
+    local BestPets = {}
+    local PotentialPets = {}
+    local BestPetsToSend = {
+        [1] = {
+            [1] = {
+                ["Event"] = "EquipBest",
+                ["Pets"] = nil
+            },
+            [2] = "\t"
+        }
+    }
+
+    for Index, Pet in pairs(Children) do
+        insert(PotentialPets, Pet.Name)
+    end
+    for i = #PotentialPets - 3, #PotentialPets do
+        insert(BestPets, PotentialPets[i])
+    end
+
+    rawset(BestPetsToSend[1][1], "Pets", BestPets)
+    dataRemoteEvent:FireServer(unpack(BestPetsToSend))
+end
+
+EquipBestPet()
