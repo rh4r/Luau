@@ -33,6 +33,8 @@ local Configs = cyn.Configs
 local ProxPrompts = Configs["ProxPrompts"]
 local EnemyChoices = Configs["EnemyChoices"]
 
+local find = table.find
+local split = string.split
 local insert = table.insert
 
 local LocalPlayer = PlayerFunctions:InitializeLocalPlayer()
@@ -113,6 +115,12 @@ ReturnHitDamage = function(PetName: string)
 end
 
 ReturnRealNumber = function(Health: string) 
+	local ValidEnds = {
+		["K"] = 10,
+		["M"] = 10000,
+		["B"] = 10000000
+	}
+
     local match = string.match
     local gsub = string.gsub
     local FixedStr
@@ -123,6 +131,15 @@ ReturnRealNumber = function(Health: string)
     end
     Health = FixedStr
 
+	local Converge = split(Health, "K")[2]
+
+	if find(ValidEnds, Converge) then
+		local Value = ValidEnds[Converge]
+
+		NewString = gsub(Health, Converge, "")
+
+		return tonumber(NewString) * Value
+	--[[
     if match(Health, "K") then
         NewString = gsub(Health, "K", "")
 
@@ -131,6 +148,8 @@ ReturnRealNumber = function(Health: string)
         NewString = gsub(Health, "M", "")
 
         return tonumber(NewString) * 10000
+	]]--
+
     else
         return tonumber(Health)
     end
