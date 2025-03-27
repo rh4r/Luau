@@ -34,6 +34,8 @@ local ProxPrompts = Configs["ProxPrompts"]
 local EnemyChoices = Configs["EnemyChoices"]
 
 local find = table.find
+local gsub = string.gsub
+local match = string.match
 local split = string.split
 local insert = table.insert
 
@@ -120,9 +122,9 @@ ReturnRealNumber = function(Health: string)
 		["M"] = 10000,
 		["B"] = 10000000
 	}
+	local Numbers = {0,1,2,3,4,5,6,7,8,9}
 
-    local match = string.match
-    local gsub = string.gsub
+	local Converge
     local FixedStr
     local NewString
 
@@ -131,7 +133,11 @@ ReturnRealNumber = function(Health: string)
     end
     Health = FixedStr
 
-	local Converge = split(Health, "K")[2]
+	for Index, Value in Health do
+		if not find(Numbers, Value) then
+			Converge = split(Health, Value)[2]
+		end
+	end
 
 	if find(ValidEnds, Converge) then
 		local Value = ValidEnds[Converge]
