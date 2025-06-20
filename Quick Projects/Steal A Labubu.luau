@@ -40,7 +40,7 @@ local PersonToStealFrom = Players:FindFirstChild(Configs.StealingFrom)
 local Teleport = function(part_going_to)
     local LocalRoot = ReturnLocalRoot()
 
-    if LocalRoot then
+    if LocalRoot and part_going_to then
         LocalRoot.CFrame = part_going_to.CFrame
         task.wait()
     end
@@ -48,7 +48,10 @@ end
 
 local FindBase = function(player)
     local NewName =  nil
-    local DisplayName = player.DisplayName
+    local DisplayName 
+    if player.DisplayName then
+        DisplayName = player.DisplayName 
+    end
     local Username = tostring(player)
 
 
@@ -178,7 +181,7 @@ local SellAllPets = function()
                 Teleport(PetToSell)
                 
                 fireproximityprompt(item, LocalRoot, 0)
-                task.wait()
+                task.wait(0.1)
                 fireproximityprompt(item, LocalRoot, 1)
                 task.wait(0.1)
             end
@@ -343,11 +346,32 @@ local Button = Tab:CreateButton({
    Callback = function()
         clear(PlrsTbl)
 
-        for a,b in Players:GetPlayers() do 
+        for a,b in pairs(Players:GetPlayers()) do 
             if b ~= LocalPlayer then
-                insert(PlrsTbl, tostring(b))
+                insert(PlrsTbl, b.Name)
             end
         end
+        sort(PlrsTbl)
+        Dropdown:Refresh(PlrsTbl)
+   end,
+})
+
+local Button = Tab:CreateButton({
+   Name = "Refresh Players List (DISPLAY NAMES)",
+   Callback = function()
+        clear(PlrsTbl)
+
+        for a,b in pairs(Players:GetPlayers()) do 
+            if b ~= LocalPlayer then
+                if b.DisplayName then 
+                    insert(PlrsTbl, b.DisplayName)
+                else
+                    insert(PlrsTbl, b.Name)
+                end
+            end
+        end
+        sort(PlrsTbl)
+        Dropdown:Refresh(PlrsTbl)
    end,
 })
 
