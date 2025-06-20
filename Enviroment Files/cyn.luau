@@ -5,7 +5,6 @@
 			But Cyn also has implimentation of other convient functions and potentially more in the future.
 ]]--
 local cyn = getgenv()
-cyn.AntiAfkRan = false
 
 cyn.OtherFunctions = {}
 cyn.PlayerFunctions = {}
@@ -130,15 +129,3 @@ cyn.decompile = function(scriptpath)
         print(body)
     end
 end
-
-task.spawn(function()
-    if not cyn.AntiAfkRan then 
-        local LP = PlayerFunctions:ReturnLocalHumanoid()
-
-        for a,b in getconnections(LP.Idled) do
-            b:Disconnect()
-        end
-    else
-        return
-    end
-end)
