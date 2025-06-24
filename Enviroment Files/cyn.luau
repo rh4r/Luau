@@ -8,9 +8,11 @@ local cyn = getgenv()
 
 cyn.OtherFunctions = {}
 cyn.PlayerFunctions = {}
+cyn.InstanceFunctions = {}
 
 local OtherFunctions = cyn.OtherFunctions
 local PlayerFunctions = cyn.PlayerFunctions
+local InstanceFunctions = cyn.InstanceFunctions
 local cloneref = cloneref or function(...) return ... end
 
 function PlayerFunctions:InitializeLocalPlayer()
@@ -60,6 +62,28 @@ function OtherFunctions:ReturnClonedService(service: string)
         CreatedService = game:GetService(service)    
     end)
     return CreatedService
+end
+
+function InstanceFunctions:FindFirstDescendantOf(Instance: any, Class: string)
+    local Found = nil
+
+    for Index, ChildInstance in pairs(Instance:GetDescendants()) do
+        if ChildInstance:IsA(Class) and ChildInstance.ClassName == Class then
+            Found = ChildInstance
+        end
+    end
+
+    if Found then
+        return Found
+    end
+end
+
+function InstanceFunctions:LoopToFind(ToLoop: table, ToFind: any)
+    for Index, Instance in pairs(ToLoop) do
+        if Instance == ToFind then
+            return Instance
+        end
+    end
 end
 
 cyn.clear_output = function()
