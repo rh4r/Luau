@@ -3,6 +3,8 @@ local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
+local cyn = getgenv()
+
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "VerboseTerminal"
 screenGui.ResetOnSpawn = false
@@ -70,7 +72,8 @@ local layout = Instance.new("UIListLayout", logFrame)
 layout.SortOrder = Enum.SortOrder.LayoutOrder
 layout.Padding = UDim.new(0, 4)
 
-local Verbose = {}
+cyn.Verbose = {}
+local Verbose = cyn.Verbose
 Verbose.MaxLogs = 100
 
 function Verbose:Log(message)
