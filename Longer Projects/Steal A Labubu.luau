@@ -26,40 +26,49 @@ local cyn = getgenv()
 
 cyn.Configs = {
     ["ToTroll"] = "",
-    ["ElonMusk"] = "",
     ["StealingFrom"] = "",
     ["KeepOrSell"] = "Keep",
+    ["Wanted"] = nil,
+    ["ElonMusk"] = nil,
     ["TheirBest"] = nil,
     ["IsLockedOrNot"] = nil,
     ["ThanksWkd"] = false,
     ["CanTakeElon"] = false,
     ["ConstantSteal"] = false,
+    ["IsBuyingLabubu"] = false,
     ["IAmAnAnnoynace"] = false,
     ["EnableBaseLock"] = false,
     ["EnableAutoCollect"] = false,
+    ["UArePrettyStrange"] = false,
     ["EnableAutoStealFromRichest"] = false,
+    ["WhitelistedLabubus"] = {}
 }
 
 local Configs = cyn.Configs
+local PlayerFunctions = cyn.PlayerFunctions
+local InstanceFunctions = cyn.InstanceFunctions
 
 local sort = table.sort
+local find = table.find
 local gsub = string.gsub
 local clear = table.clear
 local split = string.split
 local match = string.match
 local insert = table.insert
-local PlayerFunctions = cyn.PlayerFunctions
 
 ReturnLocalChar = PlayerFunctions.ReturnLocalChar
 ReturnLocalRoot = PlayerFunctions.ReturnLocalRoot
 ReturnLocalHumanoid = PlayerFunctions.ReturnLocalHumanoid
+FindFirstDescendantOf = InstanceFunctions.FindFirstDescendantOf
 
 local LocalPlayer = PlayerFunctions:InitializeLocalPlayer()
-local LocalName = LocalPlayer.Name
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local PlrsTbl = {}
+local FirstViewing = {}
 
-local Teleport = function(part_going_to)
+local Teleport = function(part_going_to: Part)
     local LocalRoot = ReturnLocalRoot()
 
     if LocalRoot and part_going_to then
@@ -68,7 +77,7 @@ local Teleport = function(part_going_to)
     end
 end
 
-local FindBase = function(player)
+local FindBase = function(player: Player)
     local NewName =  nil
     local DisplayName 
 
@@ -96,7 +105,7 @@ local FindBase = function(player)
     end
 end
 
-local CheckIfAvailable = function(base)
+local CheckIfAvailable = function(base: Model)
     local LockText = nil
     local LockButton = nil
 
@@ -134,7 +143,7 @@ local GotoBase = function(base)
 end
 ]]--
 
-local TakePet = function(pet, base)
+local TakePet = function(pet: Model, base: Model)
     local StealPetProximityPrompt = nil
 
     local LocalRoot = ReturnLocalRoot()
@@ -147,9 +156,8 @@ local TakePet = function(pet, base)
                 task.wait(0.15)
 
                 for index, pet_item in pairs(item:GetDescendants()) do
-                    if pet_item:IsA("ProximityPrompt") and pet_item.Name == "BuyProx" then
-                        task.wait()
-                        break
+                    if not pet_item:IsA("ProximityPrompt") and pet_item.Name == "BuyProx" then
+                        return
                     end
                     if pet_item:IsA("ProximityPrompt") and pet_item.Name == "StealProx" then
                         StealPetProximityPrompt = pet_item
@@ -166,7 +174,7 @@ end
 
 
 local CollectPetWhenStolen = function()
-    local LocalBase = FindBase(LocalName)
+    local LocalBase = FindBase(LocalPlayer)
     local CashPart = nil
 
     if LocalBase then
@@ -182,7 +190,7 @@ end
 
 local LockOwnBase = function()
     while cyn.Configs.EnableBaseLock == true do
-        local LocalBase = FindBase(LocalName)
+        local LocalBase = FindBase(LocalPlayer)
         local LocalRoot = ReturnLocalRoot()
 
         if LocalBase then
@@ -205,7 +213,7 @@ local LockOwnBase = function()
     end
 end
 
-local ReturnBestPet = function(base)
+local ReturnBestPet = function(base: Model)
     local HighestCash = 0
     local BestPetToGrab = nil
 
@@ -280,7 +288,6 @@ local ReturnCurrentServerwideBestWithPlayer = function()
 
         if WhoOwnsThis then
             for index, player in pairs(Players:GetPlayers()) do
-                print(player.UserId, type(player.UserId),"\n", WhoOwnsThis, type(WhoOwnsThis))
                 if tonumber(player.UserId) == WhoOwnsThis then
                     PlayerOwning = player
                 end
@@ -295,11 +302,9 @@ local ReturnCurrentServerwideBestWithPlayer = function()
     return StringToInput
 end
 
-local StealOnce = function(player)
+local StealOnce = function(player: Player)
     local Base = FindBase(player)
     local BestPet = ReturnBestPet(Base)
-    print'got base'
-    print(player)
 
     if Base then
         local IsAvailable = CheckIfAvailable(Base)
@@ -323,18 +328,20 @@ end
 
 local SellAllOnce = function()
     local LocalRoot = ReturnLocalRoot()
-    local Localbase = FindBase(LocalName)
+    local Localbase = FindBase(LocalPlayer)
 
     for index, item in pairs(Localbase:GetDescendants()) do
         if item:IsA("ProximityPrompt") and item.Name == "SellProx" then
-            local PetToSell = item.Parent
+            if not find(cyn.Configs.WhitelistedLabubus, item:FindFirstAncestorOfClass("Model").Name) then
+                local PetToSell = item.Parent
 
-            Teleport(PetToSell)
-            
-            fireproximityprompt(item, LocalRoot, 0)
-            task.wait(0.1)
-            fireproximityprompt(item, LocalRoot, 1)
-            task.wait(0.1)
+                Teleport(PetToSell)
+                
+                fireproximityprompt(item, LocalRoot, 0)
+                task.wait(0.1)
+                fireproximityprompt(item, LocalRoot, 1)
+                task.wait(0.1)
+            end
         end
     end 
     task.wait()
@@ -392,7 +399,7 @@ end
 
 local AutoCollect = function()
     while cyn.Configs.EnableAutoCollect do
-        local MyBase = FindBase(LocalName)
+        local MyBase = FindBase(LocalPlayer)
 
         if MyBase then
             local CharacterPads = MyBase.CharacterPads
@@ -416,7 +423,7 @@ local RobinHood = function()
         local Richest = cyn.Configs.ElonMusk
         local Best = cyn.Configs.TheirBest
 
-        if Richest ~= "" and Richest ~= nil then
+        if Richest ~= nil then
             local BestBase = FindBase(Richest)
             local CanTakeFrom = CheckIfAvailable(BestBase)
 
@@ -446,21 +453,23 @@ end
 local Annihilation = function()
     while cyn.Configs.IAmAnAnnoynace do
         for index, player in pairs(Players:GetPlayers()) do
-            local CurrentBase = FindBase(player)
+            if player ~= LocalPlayer then
+                local CurrentBase = FindBase(player)
 
-            if CurrentBase then
-                local IsOpen = CheckIfAvailable(CurrentBase)
+                if CurrentBase then
+                    local IsOpen = CheckIfAvailable(CurrentBase)
 
-                if IsOpen then
-                    StealOnce(player)
-                    task.wait()
-                    SellAllOnce()
-                else
-                    task.wait(0.05)
+                    if IsOpen then
+                        StealOnce(player)
+                        task.wait()
+                        SellAllOnce()
+                    else
+                        task.wait(0.05)
+                    end
                 end
             end
-        end
-        task.wait()
+            task.wait()
+        end 
     end
 end
 
@@ -469,7 +478,7 @@ local NoBuyingAnythingLol = function(player)
         local PlrBase = FindBase(player)
 
         if PlrBase then
-            for index, labubu in pairs(workspace.Map.Plots["New Plot"].CharacterPads:GetChildren()) do
+            for index, labubu in pairs(PlrBase.CharacterPads:GetChildren()) do
                 if not labubu:GetAttribute("Madeit") then
                     if labubu:FindFirstChildOfClass("Model") then
                         labubu = labubu:FindFirstChildOfClass("Model")
@@ -493,12 +502,126 @@ local NoBuyingAnythingLol = function(player)
     end
 end
 
--- GUI Lib
+local ReturnCurrentLabubus = function(player: Player)
+    local TheirBase = FindBase(player)
 
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+    if TheirBase then
+        local CharPads = TheirBase.CharacterPads
+        local Labubus = {}
 
-local PlrsTbl = {}
-local RayfieldThemes = {"Default","Amber Glow","Amethyst","Bloom","Dark Blue","Green","Light","Ocean","Serenity"}; sort(RayfieldThemes)
+        if CharPads then
+            for index, xyz in pairs(CharPads:GetChildren()) do 
+                if xyz:FindFirstChildOfClass("Model") then
+                    xyz = xyz:FindFirstChildOfClass("Model")
+
+                    insert(Labubus, xyz.Name)
+                end
+            end
+            if #Labubus > 0 or rawlen(Labubus) > 0 then
+                return Labubus 
+            else
+                return {}
+            end 
+        end
+    end
+end
+
+local SelectLabubuToBuy = function(labubu_buying: string)
+    local LabubuPath = workspace.Map.Characters
+    local PlayerBase = FindBase(LocalPlayer)
+
+    if PlayerBase then
+        while cyn.Configs.IsBuyingLabubu do
+            for Name, Labubu in pairs(LabubuPath:GetChildren()) do
+                if Labubu.Name == labubu_buying and not Labubu:IsDescendantOf(PlayerBase) then
+                    local PartGoingTo = Labubu.HumanoidRootPart or Labubu.PrimaryPart
+
+                    if PartGoingTo then
+                        Teleport(PartGoingTo)
+                        task.wait(0.1)
+                        
+                        for Name, LabubuItem in pairs(Labubu:GetDescendants()) do
+                            if LabubuItem:IsA("ProximityPrompt") and LabubuItem.Name == "BuyProx" then
+                                fireproximityprompt(LabubuItem)
+                            end
+                        end
+                    end
+                end
+            end 
+            task.wait()
+        end 
+    end
+end
+
+--[[
+local EnableVerbose = function()
+    pcall(function() loadstring(game:HttpGet('https://raw.githubusercontent.com/rh4r/Luau/refs/heads/main/Enviroment%20Files/Random%20Usecases/Verbose%20Terminal.luau'))() end)
+
+    local Verbose = cyn.Verbose
+    local IndexTable = {
+        KeepOrSell = "Auto Sell Pets",
+        IsLockedOrNot = "No Reference",
+        ThanksWkd = "Steal Labubu Buy",
+        CanTakeElon = "No Reference",
+        ConstantSteal = "Auto Steal Labubu",
+        IAmAnAnnoynace = "Sell All Pets Of Open Bases",
+        EnableBaseLock = "Auto Lock Base",
+        EnableAutoCollect = "Auto Collect",
+        EnableAutoStealFromRichest = "Auto Steal Richest Player",
+        WhitelistedLabubus = "Whitelist Labubus"
+    }
+
+    while LocalPlayer.PlayerGui:FindFirstChild("VerboseTerminal") do
+        task.wait(1)
+        print'update time reached'
+
+        for VariableName, ItsValue in cyn.Configs do
+            if ItsValue == true then
+                Verbose:Log("Variable: (", VariableName, ") is currently: ( TRUE )") 
+                print("Variable: (", VariableName, ") is currently: ( TRUE )")
+            else
+                Verbose:Log("Variable: (", VariableName, ") is currently: ( FALSE )")
+                print("Variable: (", VariableName, ") is currently: ( FALSE )")
+            end
+        end
+    end
+end
+]]--
+
+local JeffBezosTheWorld = function()
+    local LabubuPath = workspace.Map.Characters
+    local PlayerBase = FindBase(LocalPlayer)
+
+    if PlayerBase then
+        while cyn.Configs.UArePrettyStrange do
+            for Name, Labubu in pairs(LabubuPath:GetChildren()) do
+                if Labubu:IsDescendantOf(PlayerBase) then
+                    return
+                else
+                    local PartGoingTo
+                    
+                    task.spawn(function()
+                        pcall(function()
+                            PartGoingTo = Labubu.HumanoidRootPart or Labubu.PrimaryPart    
+                        end)
+                    end)
+
+                    if PartGoingTo then
+                        Teleport(PartGoingTo)
+                        task.wait(0.1)
+                        
+                        for Name, LabubuItem in pairs(Labubu:GetDescendants()) do
+                            if LabubuItem and LabubuItem:IsA("ProximityPrompt") and LabubuItem.Name == "BuyProx" then
+                                fireproximityprompt(LabubuItem)
+                            end
+                        end
+                    end
+                end 
+            end
+            task.wait(3)
+        end 
+    end
+end
 
 task.spawn(function()
     for a,b in Players:GetPlayers() do 
@@ -506,7 +629,20 @@ task.spawn(function()
             insert(PlrsTbl, tostring(b))
         end
     end
+
+    FirstViewing = ReturnCurrentLabubus(LocalPlayer)
+
+    LocalPlayer.PlayerGui.UI.Misc.Notifications.ChildAdded:Connect(function(added: any)
+        if added:IsA("Frame") and added.Name == "NotificationText" then
+            added:Destroy()
+        end
+    end)
 end)
+
+-- GUI Lib
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local RayfieldThemes = {"Default","Amber Glow","Amethyst","Bloom","Dark Blue","Green","Light","Ocean","Serenity"}; sort(RayfieldThemes)
 
 local Window = Rayfield:CreateWindow({
    Name = "w1cked",
@@ -601,6 +737,18 @@ local Button = InfoTab:CreateButton({
    end,
 })
 
+--[[
+ local InfoSec = InfoTab:CreateSection("Enable Verbose Terminal")
+
+local Button = InfoTab:CreateButton({
+   Name = "Open Verbose Terminal",
+   Callback = function()
+        EnableVerbose()
+   end,
+})
+]]--
+
+
 local TrollSec = TrollTab:CreateSection("Troll Features")
 
 local Toggle = TrollTab:CreateToggle({
@@ -613,8 +761,17 @@ local Toggle = TrollTab:CreateToggle({
    end,
 })
 
-local TrollSec = TrollTab:CreateSection("Troll Player")
+local Toggle = TrollTab:CreateToggle({
+   Name = "Autobuy Every Labubu",
+   CurrentValue = false,
+   Callback = function(Value)
+    Configs.UArePrettyStrange = Value
 
+    JeffBezosTheWorld()
+   end,
+})
+
+local TrollSec = TrollTab:CreateSection("Troll Player")
 
 local Dropdown = TrollTab:CreateDropdown({
    Name = "Select Player To Target",
@@ -777,5 +934,57 @@ local Toggle = Tab:CreateToggle({
    Callback = function(Value)
     cyn.Configs.EnableBaseLock = Value
         LockOwnBase()
+   end,
+})
+
+local Section = Tab:CreateSection("Whitelist")
+
+local Dropdown = Tab:CreateDropdown({
+   Name = "Select Labubu To Keep",
+   Options = FirstViewing,
+   CurrentOption = {},
+   MultipleOptions = true,
+   Callback = function(Options)
+        local WhitelistedLabubus = cyn.Configs.WhitelistedLabubus
+
+        if WhitelistedLabubus ~= nil then
+            clear(WhitelistedLabubus)
+        end
+
+        for index, value in pairs(Options) do
+            insert(WhitelistedLabubus, value)
+        end
+   end,
+})
+
+local Button = Tab:CreateButton({
+   Name = "Refresh Listed Labubu's",
+   Callback = function()
+        local NewLabubus = ReturnCurrentLabubus(LocalPlayer)
+
+        Dropdown:Refresh(NewLabubus)
+   end,
+})
+
+-- Sniper --
+
+local Section = Tab:CreateSection("Buying")
+
+local Input = Tab:CreateInput({
+   Name = "Type Labubu To Auto Buy (CASE SENSITIVE)",
+   CurrentValue = "",
+   PlaceholderText = "...",
+   RemoveTextAfterFocusLost = false,
+   Callback = function(Text)
+        cyn.Configs.Wanted = Text
+   end,
+})
+
+local Toggle = Tab:CreateToggle({
+   Name = "Auto Buy Selected Labubu",
+   CurrentValue = false,
+   Callback = function(Value)
+    cyn.Configs.IsBuyingLabubu = Value
+        SelectLabubuToBuy(cyn.Configs.Wanted)
    end,
 })
