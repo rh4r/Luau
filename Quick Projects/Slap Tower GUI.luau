@@ -1,3 +1,8 @@
+--[[
+	Game link: https://www.roblox.com/games/95508886069297/Slap-Tower#ropro-quick-search
+
+]]--
+
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -9,7 +14,7 @@ screenGui.Parent = playerGui
 
 local frame = Instance.new("Frame")
 frame.Name = "TerminalFrame"
-frame.Size = UDim2.new(0, 460, 0, 170)
+frame.Size = UDim2.new(0, 500, 0, 255)
 frame.Position = UDim2.new(0, 100, 0, 100)
 frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 frame.BorderSizePixel = 0
@@ -112,6 +117,60 @@ grantButton.Text = "Grant All Slappers"
 grantButton.AutoButtonColor = false
 grantButton.Parent = frame
 
+-- Player name input
+local nameInput = Instance.new("TextBox")
+nameInput.Name = "NameInput"
+nameInput.Size = UDim2.new(1, -40, 0, 30)
+nameInput.Position = UDim2.new(0, 20, 0, 180)
+nameInput.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+nameInput.Font = Enum.Font.Gotham
+nameInput.TextSize = 16
+nameInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+nameInput.PlaceholderText = "Enter player's name or display name"
+nameInput.ClearTextOnFocus = false
+nameInput.Text = ""
+nameInput.Parent = frame
+
+local inputCorner = Instance.new("UICorner")
+inputCorner.CornerRadius = UDim.new(0, 6)
+inputCorner.Parent = nameInput
+
+-- Slap toggle button
+local slapToggle = Instance.new("TextButton")
+slapToggle.Name = "SlapToggle"
+slapToggle.Size = UDim2.new(0.6, -25, 0, 30)
+slapToggle.Position = UDim2.new(0, 20, 0, 215)
+slapToggle.BackgroundColor3 = Color3.fromRGB(100, 70, 70)
+slapToggle.Font = Enum.Font.GothamBold
+slapToggle.TextSize = 16
+slapToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+slapToggle.Text = "Start Targeted Slap"
+slapToggle.AutoButtonColor = false
+slapToggle.Parent = frame
+
+local slapCorner = Instance.new("UICorner")
+slapCorner.CornerRadius = UDim.new(0, 6)
+slapCorner.Parent = slapToggle
+
+local slapStroke = Instance.new("UIStroke")
+slapStroke.Color = Color3.fromRGB(160, 120, 120)
+slapStroke.Parent = slapToggle
+
+-- Slap status label
+local slapStatus = Instance.new("TextLabel")
+slapStatus.Name = "SlapStatus"
+slapStatus.Size = UDim2.new(0.4, -15, 0, 30)
+slapStatus.Position = UDim2.new(0.6, 10, 0, 215)
+slapStatus.BackgroundTransparency = 0
+slapStatus.Font = Enum.Font.Gotham
+slapStatus.TextSize = 16
+slapStatus.Text = "TARGET: <font color='rgb(255,0,0)'>INVALID</font>"
+slapStatus.TextColor3 = Color3.fromRGB(255, 255, 255)
+slapStatus.RichText = true
+slapStatus.TextXAlignment = Enum.TextXAlignment.Left
+slapStatus.Parent = frame
+
+
 local grantCorner = Instance.new("UICorner")
 grantCorner.CornerRadius = UDim.new(0, 6)
 grantCorner.Parent = grantButton
@@ -205,6 +264,56 @@ end
 grantButton.MouseButton1Click:Connect(function()
 	GrantAllSlappers()
 end)
+
+local slapRunning = false
+local slapThread
+
+local function getTargetFromName(input)
+	input = input:lower()
+	for _, plr in pairs(Players:GetPlayers()) do
+		if plr ~= player and (plr.Name:lower() == input or plr.DisplayName:lower() == input) then
+			return plr
+		end
+	end
+end
+
+slapToggle.MouseButton1Click:Connect(function()
+	slapRunning = not slapRunning
+	slapToggle.Text = slapRunning and "Stop Targeted Slap" or "Start Targeted Slap"
+
+	if slapRunning then
+		slapThread = task.spawn(function()
+			while slapRunning do
+				local target = getTargetFromName(nameInput.Text)
+				if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+					local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+					if root then
+						slapStatus.Text = "TARGET: <font color='rgb(0,255,0)'>VALID</font>"
+						for a,b in pairs(game.Players.LocalPlayer.Backpack:GetChildren()) do
+							if not target.Character and target.Character.HumanoidRootPart then return end
+							root.CFrame = target.Character.HumanoidRootPart.CFrame
+							b.Parent = game.Players.LocalPlayer.Character
+
+							player.Character:WaitForChild(tostring(b)):WaitForChild("Event"):FireServer(
+								"slash",
+								target.Character,
+								root.CFrame.LookVector * b:WaitForChild("Power").Value
+							)
+							task.wait(0.25)
+							b.Parent = game.Players.LocalPlayer.Backpack
+						end
+					end
+				else
+					slapStatus.Text = "TARGET: <font color='rgb(255,0,0)'>INVALID</font>"
+				end
+				task.wait(0.5)
+			end
+		end)
+	else
+		slapStatus.Text = "TARGET: <font color='rgb(255,0,0)'>INVALID</font>"
+	end
+end)
+
 
 updateStatus()
 
