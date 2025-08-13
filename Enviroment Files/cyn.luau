@@ -9,25 +9,27 @@ local cyn = getgenv()
 cyn.OtherFunctions = {}
 cyn.PlayerFunctions = {}
 cyn.InstanceFunctions = {}
+cyn.EnviromentFunctions = {}
 
 local OtherFunctions = cyn.OtherFunctions
 local PlayerFunctions = cyn.PlayerFunctions
 local InstanceFunctions = cyn.InstanceFunctions
-local cloneref = cloneref or function(...) return ... end
+local EnviromentFunctions = cyn.EnviromentFunctions
+local cloneref = cloneref or function(object) return object end
 
 function PlayerFunctions:InitializeLocalPlayer()
     return cloneref(game:GetService("Players")).LocalPlayer
 end
 
-function PlayerFunctions:ReturnChar(plr: Player)
+function PlayerFunctions:ReturnChar(plr)
     return plr.Character
 end
 
-function PlayerFunctions:ReturnRoot(char: Model)
+function PlayerFunctions:ReturnRoot(char)
     return char.HumanoidRootPart or char.PrimaryPart
 end
 
-function PlayerFunctions:ReturnHumanoid(char: Model)
+function PlayerFunctions:ReturnHumanoid(char)
     return char.Humanoid or char:FindFirstAncestorOfClass("Humanoid")
 end
 
@@ -53,7 +55,7 @@ function PlayerFunctions:ReturnLocalRoot()
     return LocalRoot
 end
 
-function OtherFunctions:ReturnClonedService(service: string)
+function OtherFunctions:ReturnClonedService(service)
     local CreatedService = nil
     xpcall(function()
         CreatedService = cloneref(game:GetService(service))
@@ -64,7 +66,7 @@ function OtherFunctions:ReturnClonedService(service: string)
     return CreatedService
 end
 
-function InstanceFunctions:FindFirstDescendantOf(Instance: any, Class: string)
+function InstanceFunctions:FindFirstDescendantOf(Instance, Class)
     local Found = nil
 
     for Index, ChildInstance in pairs(Instance:GetDescendants()) do
@@ -78,7 +80,7 @@ function InstanceFunctions:FindFirstDescendantOf(Instance: any, Class: string)
     end
 end
 
-function InstanceFunctions:LoopToFind(ToLoop: table, ToFind: any)
+function InstanceFunctions:LoopToFind(ToLoop, ToFind)
     for Index, Instance in pairs(ToLoop) do
         if Instance == ToFind then
             return Instance
@@ -86,11 +88,98 @@ function InstanceFunctions:LoopToFind(ToLoop: table, ToFind: any)
     end
 end
 
+function EnviromentFunctions:CheckUpvalues(PassedFunc, item)
+    if type(PassedFunc) == "function" and islclosure(PassedFunc) and not isexecutorclosure(PassedFunc) then
+        warn(" | Cyn Check Upvalues Run  |")
+
+        local Upvalues = debug.getupvalues(PassedFunc)
+
+        if #Upvalues > 0 then
+            table.foreach(Upvalues, function(_, ValueFound)
+                if ValueFound == item then
+                    warn("Is within upvalues (NON-STRING)")
+                elseif tostring(ValueFound) == item then
+                    warn("Is within upvalues (TOSTRINGGED UPVALUE)")
+                end
+            end)
+
+        warn(" | Cyn Check Upvalues Run  |")
+        else
+            print("No Constants Found")
+        end
+    end
+end
+
+function EnviromentFunctions:CheckConstants(PassedFunc, item)
+    if type(PassedFunc) == "function" and islclosure(PassedFunc) and not isexecutorclosure(PassedFunc) then
+        warn(" | Cyn Check Constants Run  |")
+
+        local Constants = debug.getconstants(PassedFunc)
+        
+        if #Constants > 0 then
+            table.foreach(Constants, function(_, ValueFound)
+                if ValueFound == item then
+                    warn("Is within constants (NON-STRING)")
+                elseif tostring(ValueFound) == item then
+                    warn("Is within constants (TOSTRINGGED COSNTANT)")
+                end
+            end)
+
+        warn(" | Cyn Check Constants Run  |")
+        else
+            print("No Constants Found")
+        end
+    end
+end
+
+function EnviromentFunctions:CompareEnv(PassedFunc, Enviroment1)
+    local FuncEnviroment = getfenv(PassedFunc)
+
+    if FuncEnviroment == Enviroment1 then
+        return true
+    else
+        return false
+    end
+end
+
+function EnviromentFunctions:DebugOutputFunction(PassedFunc)
+    local ginfo = debug.getinfo
+    local info = ginfo(PassedFunc)
+
+    local ginfoChecks = {
+        ["FUNCTION ITSELF: "]             = info.func,
+        ["FUNCTION NAME: "]               = info.name,
+        ["FUNCTION SOURCE: "]             = info.source,
+        ["FUNCTION UPVALUES: "]           = info.nups,
+        ["FUNCTION CONSTANTS: "]          = #debug.getconstants(PassedFunc),
+        ["FUNCTION LINE DEFINED: "]       = info.linedefined,
+        ["FUNCTION LANGUAGE DEFINED IN:"] = info.what,
+    }
+
+    local order = {
+        "FUNCTION ITSELF: ",
+        "FUNCTION NAME: ",
+        "FUNCTION SOURCE: ",
+        "FUNCTION UPVALUES: ",
+        "FUNCTION CONSTANTS: ",
+        "FUNCTION LINE DEFINED: ",
+        "FUNCTION LANGUAGE DEFINED IN:",
+    }
+
+    warn(" | Cyn Function  Information Return |")
+
+    for _, key in ipairs(order) do
+        print(key, ginfoChecks[key])
+    end
+
+    warn("| Cyn Function  Information Return |")
+end
+
 cyn.clear_output = function()
     cloneref(game:GetService("LogService")):ClearOutput()
 end
 
-cyn.check_alive = function(plr: Player)
+cyn.check_alive = function(plr)
     local PlrChar = PlayerFunctions:ReturnChar(plr)
     local PlrHumanoid = PlayerFunctions:ReturnHumanoid(PlrChar)
 
@@ -101,11 +190,11 @@ cyn.check_alive = function(plr: Player)
     end
 end
 
-cyn.kick = function(message: string)
+cyn.kick = function(message)
     PlayerFunctions:InitializeLocalPlayer():Kick(message)
 end
 
-cyn.copy_position = function(root: Part, keybind: Enum.KeyCode)
+cyn.copy_position = function(root, keybind)
     if root and not keybind then
         setclipboard(root.Position)
     end
