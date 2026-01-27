@@ -16,7 +16,7 @@
             + Cursed spirit ESP
         Autos:
             + Auto Collect Tailsmen (DONE)
-            + Auto area quests
+            + Auto area quests (PARTLY DONE)
             + Auto story quests
             + Auto perfect parry
             + Automatic boss farm
@@ -34,7 +34,7 @@ local cyn = getgenv()
 
 cyn.Configuration = {
     ["AutomaticFeatures"] = {
-        ["M1"] = false,
+        ["AutoM1"] = false,
         ["Tailsmen"] = false,
         ["AreaQuest"] = false,
         ["StoryQuest"] = false,
@@ -68,10 +68,12 @@ local AutomaticFeatures = cyn.Configuration.AutomaticFeatures
 local MiscFeatures = cyn.Configuration.MiscFeatures
 local ESPFeatures = cyn.Configuration.ESPFeatures
 
-
+local floor = math.floor
+local random = math.random
 local foreach = table.foreach
 local insert = table.insert
 local sub = string.sub
+local split = string.split
 local len = string.len
 local find = table.find
 local remove = table.remove
@@ -79,6 +81,8 @@ local remove = table.remove
 local cloneref = cloneref or function(...) return ... end 
 
 local ReturnLocalRoot = PlayerFunctions.ReturnLocalRoot
+local ReturnLocalChar = PlayerFunctions.ReturnLocalChar
+local ReturnLocalHumanoid = PlayerFunctions.ReturnLocalHumanoid
 
 local Services = setmetatable({}, {
     __index = function(self, key)
@@ -86,7 +90,7 @@ local Services = setmetatable({}, {
     end
 })
 
-local function FindFirstDescendantOf(ParentObject: Instance, ClassToFind: string)
+local function FindFirstDescendantOf(ParentObject: any, ClassToFind: string)
     for _, temp in pairs(ParentObject:GetDescendants()) do
         if temp:IsA(ClassToFind) then
             return temp
@@ -94,7 +98,7 @@ local function FindFirstDescendantOf(ParentObject: Instance, ClassToFind: string
     end
 end
 
-local function FindFirstDescendantNamed(ParentObject: Instance, DescendantName: string)
+local function FindFirstDescendantNamed(ParentObject: any, DescendantName: string)
     for _, finding_descendant in pairs(ParentObject:GetDescendants()) do
         if finding_descendant.Name == DescendantName then
             return finding_descendant
@@ -103,7 +107,7 @@ local function FindFirstDescendantNamed(ParentObject: Instance, DescendantName: 
 end
 
 local function LOG(type_of_log: any, logging_text: string)
-    type_of_log(logging_text)
+    type_of_log("[LOG] "..logging_text)
 end
 
 local function MONITOR_REMOTE_EVENT(PassedRemote: RemoteEvent)
@@ -127,6 +131,7 @@ local ReplicatedStorage = cloneref(Services.ReplicatedStorage)
 
 local LocalPlayer = cloneref(Players.LocalPlayer)
 local PlayerGui = LocalPlayer.PlayerGui
+local Backpack = LocalPlayer.Backpack
 
 local Camera = cloneref(workspace.CurrentCamera)
 local PLAYER_ESP_OBJECTS = {}
@@ -136,6 +141,7 @@ local CardsToFilter = PlayerGui.Missions.Frame.Main.Cards
 
 local ChosenQuest = nil
 
+local MeleeFunction = nil
 local M1ArgumentsTable = {}
 
  -- // Functions & Remote Events \\ -- 
@@ -173,6 +179,18 @@ local function TELEPORT(TeleportingTo: Part)
     end
 end
 
+local function TELEPORT_WITH_OFFSET(TP_Part: Part, X_OFFSET: number, Y_OFFSET: number, Z_OFFSET: number)
+    local LocalRoot = ReturnLocalRoot()
+    local NewCFrame = CFrame.new(
+        TP_Part.CFrame.X - (X_OFFSET or 0),
+        TP_Part.CFrame.Y - (Y_OFFSET or 0),
+        TP_Part.CFrame.Z - (Z_OFFSET or 0)
+    )
+
+    if TP_Part and VALIDATE_OBJECT(LocalRoot) then
+        LocalRoot.CFrame = NewCFrame
+    end
+end
 
 local function REDEEM_CODES()
     local code_list = {
@@ -229,6 +247,7 @@ local function RETURN_HIGHEST_QUEST_PRIORITY()
     local PriorityQueue = {
         ["Exorcise"] = 1,
         ["Defeat"] = 2,
+        ["Defeat a band"] = 2,
         ["Capture"] = 3
     }
 
@@ -248,22 +267,22 @@ local function RETURN_HIGHEST_QUEST_PRIORITY()
 
 
     for quest_no, quest_value in pairs(CurrentQuests) do
-        local HighestPrio = 4
-        local QuestText = quest_value[1] 
-        local QuestPrio = PriorityQueue[QuestText]
+        local HighestPrio = 999
+        local QuestText = quest_value[1]; warn("Quest Text: ", QuestText)
+        local QuestPrio = PriorityQueue[QuestText]; warn("Quest Priority: ", QuestPrio)
 
-        if QuestPrio < HighestPrio and quest_value[2]:FindFirstChild("Info") then
-            warn("uwu")
-            ChosenQuest = quest_value[2]
-            warn("uwu")
-            HighestPrio = QuestPrio 
-            warn("uwu")
-            print(ChosenQuest)
-        else
-            LOG(warn, "No quest found.")
+        if ChosenQuest == nil and QuestPrio < HighestPrio and quest_value[2]:FindFirstChild("Info") then
+            ChosenQuest = quest_value[2]; warn("Chosen Quest: ", ChosenQuest)
+            HighestPrio = QuestPrio; warn("New Highest Priority: ", HighestPrio)
         end
     end
-        print'gae'
+
+    if ChosenQuest == nil then
+        LOG(warn, "No chosen quest found, returning random.")
+
+        ChosenQuest = CurrentQuests[random(1, #CurrentQuests)]
+    end
+
     return ChosenQuest
 end
 
@@ -300,34 +319,122 @@ local function RETURN_MOB_LIST()
     end)
 end
 
-local function AUTO_M1()
-    while AutomaticFeatures.M1 and task.wait() do
-        local MobArguments = RETURN_MOB_LIST()
+local function EQUIP_FISTS()
+    pcall(function()
+        local LocalCharacter = ReturnLocalChar()
 
-        task.spawn(function()
-            M1:FireServer({math.random(1,4), MobArguments})
-            task.wait(0.25)
-        end)
+        Backpack.Skills.Parent = LocalCharacter
+    end)
+end
+
+local function AUTO_M1()
+    if MeleeFunction then
+        MeleeFunction(require(ControlsTable), nil)
+    else
+        local ControlHandler = require(ControlsTable)
+
+        EQUIP_FISTS()
+
+        for element_name, element_value in pairs(ControlHandler) do
+            if element_name == "m1" then
+                MeleeFunction = element_value
+            end
+        end
     end
 end
 
-local function AREA_QUESTS()
-    local HighestPrioQuest = RETURN_HIGHEST_QUEST_PRIORITY()
-    
+local function RETURN_CLOSEST_MOB()
+    local ClosestMob
+    local ClosestDist = 500
+    local LocalRoot = ReturnLocalRoot()
+
+    for mob_index, mob_instance in pairs(MobPath:GetChildren()) do
+        if mob_instance and mob_instance.PrimaryPart then
+            local ComparePart = mob_instance.PrimaryPart
+            local DistanceCheck = (LocalRoot.Position - ComparePart.Position).Magnitude
+
+            if DistanceCheck < ClosestDist then
+                ClosestMob = mob_instance
+                ClosestDist = floor(DistanceCheck)
+            end
+        end
+    end
+
+    return ClosestMob
+end
+
+local function TRAIL_MOB(MobObject: Model)
+    local PrimaryPart = MobObject.PrimaryPart
+    local LocalRoot = ReturnLocalRoot()
+
+    if VALIDATE_OBJECT(LocalRoot) and VALIDATE_OBJECT(PrimaryPart) then
+        LocalRoot.Orientation = PrimaryPart.Orientation
+
+        TELEPORT_WITH_OFFSET(PrimaryPart, 0, 0, 2)
+    end
+end
+
+local function CLAIM_AREA_QUEST(CurrentArea: string)
+    local HighestPrioQuest = RETURN_HIGHEST_QUEST_PRIORITY()     
     local QuestIndexToNumber = GET_NUMBER_FROM_QUEST(tostring(HighestPrioQuest))
 
     for key, value in pairs(CardsToFilter:GetChildren()) do
         if value == HighestPrioQuest then
-            local CurrentArea = "Shijo Town Set"
             local NewQuestString = "Quest" .. QuestIndexToNumber
             local QuestParent = PlayerMissions[CurrentArea]
             local QuestArgument = QuestParent:WaitForChild(NewQuestString)
 
             ClaimFunc:InvokeServer(QuestArgument)
-            task.wait(0.5)
-            SKYDIVE()
-            task.wait(4)
-            AUTO_M1()
+            print("Invoked quest: ", QuestArgument)
+        end
+    end
+end
+
+local function ONLY_CLOSE_MOBS()
+    local ClosestDist = 1000
+    local LocalRoot = ReturnLocalRoot()
+    local MobsInRange = {}
+
+    for close_index, close_instance in pairs(MobPath:GetChildren()) do
+        if close_instance and close_instance.PrimaryPart then
+            local ComparePart = close_instance.PrimaryPart
+            local DistanceCheck = (LocalRoot.Position - ComparePart.Position).Magnitude
+
+            if DistanceCheck < ClosestDist then
+                insert(MobsInRange, close_instance)
+            end
+        end
+    end
+    return MobsInRange
+end
+
+local function MOB_HAS_HEALTH_OBJECT(MobObj: Model)
+    local MobCurrentHumanoidRootPart = MobObj and MobObj:FindFirstChild("HumanoidRootPart")
+
+    return MobCurrentHumanoidRootPart
+        and MobCurrentHumanoidRootPart:IsDescendantOf(workspace)
+        and MobCurrentHumanoidRootPart:FindFirstChild("Health")
+end
+
+
+local function AREA_QUESTS()
+    while AutomaticFeatures.AreaQuest and task.wait() do
+        CLAIM_AREA_QUEST("Shijo Town Set")
+        task.wait(0.5)
+
+        SKYDIVE()
+        task.wait(5)
+
+        local MobsToAttack = ONLY_CLOSE_MOBS()
+
+        for index, enemy_npc in pairs(MobsToAttack) do
+            while MOB_HAS_HEALTH_OBJECT(enemy_npc) do
+                TRAIL_MOB(enemy_npc)   
+                AUTO_M1()
+
+                print("In loop...")
+                task.wait(0.3)
+            end 
         end
     end
 end
@@ -406,7 +513,9 @@ end
 
 print("pre-test")
 
-AutomaticFeatures.M1 = true
+
+AutomaticFeatures.AutoM1 = true
+AutomaticFeatures.AreaQuest = true
 
 AREA_QUESTS()
 
