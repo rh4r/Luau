@@ -1,5 +1,3 @@
-local Debris = game:GetService("Debris")
-local ReplicatedFirst = game:GetService("ReplicatedFirst")
 -- // Credits & Description \\ -- 
 --[[
     Description: 
