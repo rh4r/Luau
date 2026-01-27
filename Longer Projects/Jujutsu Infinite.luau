@@ -16,7 +16,7 @@
             + Cursed spirit ESP
         Autos:
             + Auto Collect Tailsmen (DONE)
-            + Auto area quests (PARTLY DONE)
+            + Auto area quests
             + Auto story quests
             + Auto perfect parry
             + Automatic boss farm
@@ -144,6 +144,9 @@ local ChosenQuest = nil
 local MeleeFunction = nil
 local M1ArgumentsTable = {}
 
+-- // UI Functionality Variables \\ -- 
+local SelectedArea = nil
+
  -- // Functions & Remote Events \\ -- 
 local MobPath = workspace.Objects.Mobs
 
@@ -169,7 +172,6 @@ local Client = LocalPlayer.PlayerScripts:WaitForChild("Client")
 local function VALIDATE_OBJECT(ObjectChecking: any)
     return ObjectChecking and ObjectChecking:IsDescendantOf(workspace)
 end
-
 
 local function TELEPORT(TeleportingTo: Part)
     local LocalRoot = ReturnLocalRoot()
@@ -217,7 +219,6 @@ local function REDEEM_CODES()
     end
     return
 end
-
 
 local function COLLECT_ALL_TAILSMEN()
     while AutomaticFeatures.Tailsmen and task.wait() do
@@ -394,9 +395,10 @@ local function ONLY_CLOSE_MOBS()
     local ClosestDist = 1000
     local LocalRoot = ReturnLocalRoot()
     local MobsInRange = {}
+    local BlacklistedMobs = {"Egg Jaw"}
 
     for close_index, close_instance in pairs(MobPath:GetChildren()) do
-        if close_instance and close_instance.PrimaryPart then
+        if close_instance and close_instance.PrimaryPart and not find(BlacklistedMobs, close_instance.Name) then
             local ComparePart = close_instance.PrimaryPart
             local DistanceCheck = (LocalRoot.Position - ComparePart.Position).Magnitude
 
@@ -416,10 +418,9 @@ local function MOB_HAS_HEALTH_OBJECT(MobObj: Model)
         and MobCurrentHumanoidRootPart:FindFirstChild("Health")
 end
 
-
 local function AREA_QUESTS()
     while AutomaticFeatures.AreaQuest and task.wait() do
-        CLAIM_AREA_QUEST("Shijo Town Set")
+        CLAIM_AREA_QUEST(SelectedArea)
         task.wait(0.5)
 
         SKYDIVE()
@@ -438,6 +439,37 @@ local function AREA_QUESTS()
         end
     end
 end
+
+local function STORY_QUESTS()
+    
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -511,13 +543,353 @@ local function PLAYER_ESP()
     end)
 end
 
-print("pre-test")
 
 
-AutomaticFeatures.AutoM1 = true
-AutomaticFeatures.AreaQuest = true
 
-AREA_QUESTS()
 
-print("post-test")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- // User Interface \\ -- 
+
+local MacLib = loadstring(game:HttpGet("https://github.com/biggaboy212/Maclib/releases/latest/download/maclib.txt"))()
+
+local Window = MacLib:Window({
+    Title = "Followers Of Rher",
+    Subtitle = "Developed by | rh4r",
+    Size = UDim2.fromOffset(868, 650),
+    DragStyle = 1,
+    DisabledWindowControls = {},
+    ShowUserInfo = true,
+    Keybind = Enum.KeyCode.RightControl,
+    AcrylicBlur = true,
+})
+
+local TabGroup = Window:TabGroup()
+
+local AutoTab = TabGroup:Tab({
+  Name = "Auto Functions",
+})
+
+local ESPTab = TabGroup:Tab({
+  Name = "ESP Functions",
+})
+
+local MiscTab = TabGroup:Tab({
+  Name = "Misc Functions",
+})
+
+
+-- // Automatic Features In UI \\ -- 
+
+local MainTab = AutoTab:Section({
+  Side = "Left"
+})
+
+MainTab:Header({
+  Text = "Auto Complete Quests In Selected Area"
+})
+
+MainTab:Dropdown({
+	Name = "Chosen Location",
+	Search = true,
+	Multi = false,
+	Required = false,
+	Options = {"Shijo Town Set", "Umi Village Set", "Numa Temple Set", "Kura Camp Set", "Yuki Fortress Set"},
+	Default = {"Shijo Town Set"},
+	Callback = function(Value)
+        SelectedArea = Value
+	end,
+})
+
+
+MainTab:Toggle({
+	Name = "Complete Quests In Area",
+	Default = false,
+	Callback = function(value)
+        AutomaticFeatures.AutoM1 = true
+        AutomaticFeatures.AreaQuest = true
+
+        AREA_QUESTS()
+	end,
+})
+
+local BossTab = AutoTab:Section({
+  Side = "Right"
+})
+
+BossTab:Header({
+  Text = "Auto Boss"
+})
+
+BossTab:Dropdown({
+	Name = "Chosen Boss",
+	Search = true,
+	Multi = false,
+	Required = false,
+	Options = {"nil"},
+	Default = {"nil"},
+	Callback = function(Value)
+        SelectedArea = Value
+	end,
+})
+
+BossTab:Toggle({
+	Name = "Enable",
+	Default = false,
+	Callback = function(value)
+        return
+	end,
+})
+
+local InvestigationTab = AutoTab:Section({
+  Side = "Left"
+})
+
+InvestigationTab:Header({
+  Text = "Auto Investigation Farm"
+})
+
+InvestigationTab:Dropdown({
+	Name = "Chosen Investigation",
+	Search = true,
+	Multi = false,
+	Required = false,
+	Options = {"nil"},
+	Default = {"nil"},
+	Callback = function(Value)
+        SelectedArea = Value
+	end,
+})
+
+InvestigationTab:Toggle({
+	Name = "Enable",
+	Default = false,
+	Callback = function(value)
+        return
+	end,
+})
+
+local TailsmenTab = AutoTab:Section({
+  Side = "Left"
+})
+
+TailsmenTab:Header({
+  Text = "Auto Collect Tailsmen"
+})
+
+TailsmenTab:Toggle({
+	Name = "Enable",
+	Default = false,
+	Callback = function(value)
+        AutomaticFeatures.Tailsmen = value
+
+        COLLECT_ALL_TAILSMEN()
+	end,
+})
+
+local PerfectTab = AutoTab:Section({
+  Side = "Right"
+})
+
+PerfectTab:Header({
+  Text = "Auto Perfect Parry"
+})
+
+PerfectTab:Toggle({
+	Name = "Enable",
+	Default = false,
+	Callback = function(value)
+        return
+	end,
+})
+
+local AlwaysBlackFlash = AutoTab:Section({
+  Side = "Right"
+})
+
+AlwaysBlackFlash:Header({
+  Text = "Auto Hit Black Flash / Chant"
+})
+
+AlwaysBlackFlash:Toggle({
+	Name = "Enable",
+	Default = false,
+	Callback = function(value)
+        return
+	end,
+})
+
+local StoryTab = AutoTab:Section({
+  Side = "Right"
+})
+
+StoryTab:Header({
+  Text = "Auto Story Quest"
+})
+
+StoryTab:Toggle({
+	Name = "Enable",
+	Default = false,
+	Callback = function(value)
+        return
+	end,
+})
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- // ESP UI Functions \\ -- 
+
+local MainTab = ESPTab:Section({
+  Side = "Left"
+})
+
+MainTab:Header({
+  Text = "NPC ESP"
+})
+
+MainTab:Button({
+	Name = "Enable",
+	Callback = function()
+		return
+	end,
+})
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- // Misc UI Functions \\ -- 
+
+local MainTab = MiscTab:Section({
+  Side = "Left"
+})
+
+MainTab:Header({
+  Text = "Auto Redeem All Codes"
+})
+
+MainTab:Button({
+	Name = "Enable",
+	Callback = function()
+		return
+	end,
+})
+
+local DisplayTabs = MiscTab:Section({
+  Side = "Right"
+})
+
+DisplayTabs:Header({
+  Text = "Display Cursed Market"
+})
+
+DisplayTabs:Paragraph({
+  Header = "Current Market",
+  Body = "Place holder text: $9e9"
+})
+
+DisplayTabs:Button({
+	Name = "Refresh",
+	Callback = function()
+		return
+	end,
+})
+
+
+local ChangeTheme = MiscTab:Section({
+  Side = "Left"
+})
+
+ChangeTheme:Header({
+  Text = "Change UI Theme"
+})
+
+ChangeTheme:Button({
+	Name = "Nihil",
+	Callback = function()
+		return
+	end,
+})
+
+local CashMarket = MiscTab:Section({
+  Side = "Right"
+})
+
+CashMarket:Header({
+  Text = "Display Cash Market"
+})
+
+CashMarket:Paragraph({
+  Header = "Current Market",
+  Body = "Place holder text: $9e9"
+})
+
+CashMarket:Button({
+	Name = "Refresh",
+	Callback = function()
+		return
+	end,
+})
