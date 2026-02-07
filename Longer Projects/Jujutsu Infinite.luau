@@ -7,7 +7,7 @@
     Game Link:
         https://www.roblox.com/games/10450270085/Jujutsu-Infinite
     Last Update:
-        nihil @ nihil
+        7th Febuary @ nihil
     To-Do:
         ESP:
             + NPC ESP
@@ -15,18 +15,28 @@
             + Dropped item ESP
             + Cursed spirit ESP
         Autos:
+            + Auto Farm Daily
+            + Auto Collect Chests (DONE)
+            + Auto Farm Calamity
             + Auto Collect Tailsmen (DONE)
             + Auto area quests
+            + Auto Kill Aura (DONE)
             + Auto story quests
             + Auto perfect parry
             + Automatic boss farm
             + Automatic investigation farm
             + Always hit blackflash / chant
+            + Auto use items
+            + Auto collect items
+            + Auto Sell items
         Misc Features:
             + Redeem all codes (DONE)
             + Build saving + loading
             + Server hop for dropped items
-            + Cursed & Cash market displays
+            + Cursed & Cash market displays (DONE)
+            + Roll selected innate
+            + Teleport to town
+            + Teleport to portal
 ]]--
 
 -- // User Configuration \\ -- 
@@ -35,6 +45,8 @@ local cyn = getgenv()
 cyn.Configuration = {
     ["AutomaticFeatures"] = {
         ["AutoM1"] = false,
+        ["CollectChest"] = false,
+        ["EnableKillAura"] = false,
         ["Tailsmen"] = false,
         ["AreaQuest"] = false,
         ["StoryQuest"] = false,
@@ -48,6 +60,10 @@ cyn.Configuration = {
     },
     ["ESPFeatures"] = {
         ["Player"] = false,
+    },
+    ["BoolConfigNumbers"] = {
+        ["KillAuraRadius"] = 100,
+        ["KillAuraColor"] = Color3.fromRGB(147, 1, 0),
     }
 }
 
@@ -67,6 +83,7 @@ local PlayerFunctions = cyn.PlayerFunctions
 local AutomaticFeatures = cyn.Configuration.AutomaticFeatures
 local MiscFeatures = cyn.Configuration.MiscFeatures
 local ESPFeatures = cyn.Configuration.ESPFeatures
+local BoolsForConfig = cyn.Configuration.BoolConfigNumbers
 
 local floor = math.floor
 local random = math.random
@@ -75,6 +92,7 @@ local insert = table.insert
 local sub = string.sub
 local split = string.split
 local len = string.len
+local sfind = string.find
 local find = table.find
 local remove = table.remove
 
@@ -123,11 +141,11 @@ local function MONITOR_REMOTE_EVENT(PassedRemote: RemoteEvent)
     end))
 end
 
--- // Game Globals \\ -- 
-local Players = cloneref(Services.Players)
-local RunService = cloneref(Services.RunService)
-local ReplicatedFirst = cloneref(Services.ReplicatedFirst)
-local ReplicatedStorage = cloneref(Services.ReplicatedStorage)
+-- // Game Globals \\ --
+local Players = Services.Players
+local RunService = Services.RunService
+local ReplicatedFirst = Services.ReplicatedFirst
+local ReplicatedStorage = Services.ReplicatedStorage
 
 local LocalPlayer = cloneref(Players.LocalPlayer)
 local PlayerGui = LocalPlayer.PlayerGui
@@ -148,12 +166,13 @@ local M1ArgumentsTable = {}
 local SelectedArea = nil
 
  -- // Functions & Remote Events \\ -- 
-local MobPath = workspace.Objects.Mobs
+local Objects = workspace.Objects
+local MobPath = Objects.Mobs
 
 local ControlsTable = ReplicatedFirst.Dependencies.Controls
 
 local ServerEvents = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Server")
-local PlayerMissions = ReplicatedStorage:WaitForChild("Missions"):WaitForChild("HollovvSquadd")
+local PlayerMissions = ReplicatedStorage:WaitForChild("Missions"):WaitForChild(LocalPlayer.Name)
 
 local DataEvent = ServerEvents:WaitForChild("Data")
 local Combat = ServerEvents:WaitForChild("Combat")
@@ -163,9 +182,12 @@ local M1 = Combat:WaitForChild("M1")
 
 local RedeemFunc = DataEvent:WaitForChild("RedeemCode")
 local ClaimFunc = DataEvent:WaitForChild("ClaimQuest")
+local RerollMissions = DataEvent:WaitForChild("RerollMissions")
 
 local ReplicatedTempData = LocalPlayer:WaitForChild("ReplicatedTempData")
 local Client = LocalPlayer.PlayerScripts:WaitForChild("Client")
+
+local GetResponse = ServerEvents:WaitForChild("Dialogue"):WaitForChild("GetResponse")
 
 
 -- // Game Functions \\ --
@@ -196,33 +218,29 @@ end
 
 local function REDEEM_CODES()
     local code_list = {
-        "SHOWDOWN_SORRY!",
-        "WINTER_EVENT_OUT",
-        "WINTER_SOON",
-        "SOUL_KING_OUT",
-        "HAPPY_2026",
-        "95_PERCENT",
-        "EXCHANGE_OUT",
-        "EXCHANGE_50"
+        "WINTER_END",
+        "1M_LIKES",
+        "96_PERCENT",
+        "2M_FAVS"
     }
     local redeem_remote = cloneref(RedeemFunc)
 
     for _, code in pairs(code_list) do
         CodeButton.Text = code
-        task.wait(0.25)
+        task.wait(0.5)
 
         redeem_remote:InvokeServer(code)
         warn(
             "Redeemed code: ", code
         )
-        task.wait(1)
+        task.wait(3)
     end
     return
 end
 
 local function COLLECT_ALL_TAILSMEN()
     while AutomaticFeatures.Tailsmen and task.wait() do
-        local TailsmenLocation = workspace.Objects.Drops
+        local TailsmenLocation = Objects.Drops
 
         for _, tailsmen in pairs(TailsmenLocation:GetChildren()) do
             if tailsmen.Name == "Talisman" then
@@ -242,17 +260,18 @@ local function COLLECT_ALL_TAILSMEN()
 end
 
 local function RETURN_HIGHEST_QUEST_PRIORITY()
-    TELEPORT(workspace.Objects.Portals.Missions)
+    TELEPORT(Objects.Portals.Missions)
     task.wait(2)
 
     local PriorityQueue = {
         ["Exorcise"] = 1,
         ["Defeat"] = 2,
         ["Defeat a band"] = 2,
-        ["Capture"] = 3
+        ["Capture"] = 99
     }
 
     local CurrentQuests = {}
+    local TempHolderValue
 
     for quest_index, quest in pairs(CardsToFilter:GetChildren()) do
         if quest:IsA("Frame") then
@@ -272,19 +291,28 @@ local function RETURN_HIGHEST_QUEST_PRIORITY()
         local QuestText = quest_value[1]; warn("Quest Text: ", QuestText)
         local QuestPrio = PriorityQueue[QuestText]; warn("Quest Priority: ", QuestPrio)
 
-        if ChosenQuest == nil and QuestPrio < HighestPrio and quest_value[2]:FindFirstChild("Info") then
+        if ChosenQuest == nil and QuestPrio <= HighestPrio and quest_value[2]:FindFirstChild("Info") and not sfind(quest_value[1], "Capture") then
             ChosenQuest = quest_value[2]; warn("Chosen Quest: ", ChosenQuest)
+            TempHolderValue = quest_value[1]
             HighestPrio = QuestPrio; warn("New Highest Priority: ", HighestPrio)
         end
     end
 
     if ChosenQuest == nil then
-        LOG(warn, "No chosen quest found, returning random.")
+        print("L capture blud rerolling...")
 
-        ChosenQuest = CurrentQuests[random(1, #CurrentQuests)]
+        table.clear(CurrentQuests)
+        TempHolderValue = nil
+
+        RerollMissions:InvokeServer(SelectedArea)
+        task.wait(3)
+
+        RETURN_HIGHEST_QUEST_PRIORITY()
+    else
+        print("Suitable Quest!")
+
+        return ChosenQuest
     end
-
-    return ChosenQuest
 end
 
 local function GET_NUMBER_FROM_QUEST(QuestStr: string)
@@ -371,7 +399,11 @@ local function TRAIL_MOB(MobObject: Model)
     if VALIDATE_OBJECT(LocalRoot) and VALIDATE_OBJECT(PrimaryPart) then
         LocalRoot.Orientation = PrimaryPart.Orientation
 
-        TELEPORT_WITH_OFFSET(PrimaryPart, 0, 0, 2)
+        if not string.find(MobObject.Name, "Curse") then
+            TELEPORT_WITH_OFFSET(PrimaryPart, 0, 3, 2)    
+        else
+            TELEPORT_WITH_OFFSET(PrimaryPart, 0, 0, 2)
+        end
     end
 end
 
@@ -391,8 +423,8 @@ local function CLAIM_AREA_QUEST(CurrentArea: string)
     end
 end
 
-local function ONLY_CLOSE_MOBS()
-    local ClosestDist = 1000
+local function ONLY_CLOSE_MOBS(distance_to_check: number)
+    local ClosestDist = distance_to_check or 1000
     local LocalRoot = ReturnLocalRoot()
     local MobsInRange = {}
     local BlacklistedMobs = {"Egg Jaw"}
@@ -429,48 +461,149 @@ local function AREA_QUESTS()
         local MobsToAttack = ONLY_CLOSE_MOBS()
 
         for index, enemy_npc in pairs(MobsToAttack) do
-            while MOB_HAS_HEALTH_OBJECT(enemy_npc) do
-                TRAIL_MOB(enemy_npc)   
-                AUTO_M1()
+            while MOB_HAS_HEALTH_OBJECT(enemy_npc) and AutomaticFeatures.AreaQuest do
+                task.spawn(function()
+                    TRAIL_MOB(enemy_npc)
+                end)
 
-                print("In loop...")
+                AUTO_M1()
                 task.wait(0.3)
             end 
         end
     end
 end
 
-local function STORY_QUESTS()
+local function KILL_AURA()
+    local KillAuraRadius = cyn.Configuration.BoolConfigNumbers.KillAuraRadius
+    local KillAuraPart = Instance.new("Part", workspace)
+    KillAuraPart.Transparency = 0.8
+    KillAuraPart.CanCollide = false
+    KillAuraPart.Material = Enum.Material.Neon
+    KillAuraPart.Size = Vector3.new(KillAuraRadius, 0.1, KillAuraRadius)
+
+    print("PART CREATED AT: ", KillAuraPart:GetFullName())
+
+    while AutomaticFeatures.EnableKillAura and task.wait() do 
+        local CloseMobs = ONLY_CLOSE_MOBS(KillAuraRadius)
+        local LocalRoot = ReturnLocalRoot()
+        local NewPos = Vector3.new(LocalRoot.Position.X, LocalRoot.Position.Y - 2.5, LocalRoot.Position.Z)
+        KillAuraPart.Position = NewPos
+        KillAuraPart.Color = BoolsForConfig.KillAuraColor
+
+        for _, MobInstance in pairs(CloseMobs) do
+            while MOB_HAS_HEALTH_OBJECT(MobInstance) do
+                TRAIL_MOB(MobInstance)
+                AUTO_M1()
+                task.wait(0.3) 
+            end
+        end 
+    end
+end
+
+local function RETURN_STORYLINE_NPC()
+    local NPC_Folder = Objects.NPCs:GetDescendants()
+    local StorylineNPCRoot = PlayerGui.StorylineMarker.Adornee:GetFullName()
+    local NPC_Object
     
+    for _, NpcChild in pairs(NPC_Folder) do
+        if NpcChild == StorylineNPCRoot then
+            NPC_Object = NpcChild:FindFirstAncestorOfClass("Model")
+        end
+    end
+    return 
+end
+
+local function RETURN_STORYLINE_ARGS()
+       local t = filtergc("table", {
+            Key = {"Accept/NS_Q1_BanditOutpost_Start"}
+        })
+
+        local CopyString = {}
+
+        if t then
+            for i, v in ipairs(t) do
+                if v == "Accept/NS_Q1_BanditOutpost_Start" then
+                    for offset = 3, math.min(200, i - 1) do
+                        local NewIndex = i - offset
+                        local NewVal = t[NewIndex]
+
+                        if type(NewVal) ~= "string" then
+                            break
+                        end
+
+                        if find(NewVal, "NS_") then
+                            insert(CopyString, NewVal)
+                        end
+                    end
+
+                end
+            end
+        end
+    return CopyString
+end
+
+local function AUTO_STORYLINE()
+    --[[
+        local args = {
+        "Clan Head",
+        "Accept/NS_Q1_BanditOutpost_Start"
+    }
+    GetResponse:InvokeServer(unpack(args))
+
+    ]]
+
+    local AcceptableResponses = RETURN_STORYLINE_ARGS()
+    local CurrentStoryNpc = RETURN_STORYLINE_NPC()
+    local Primary = CurrentStoryNpc.PrimaryPart
+    local DialogueInteract = CurrentStoryNpc.DialogueInteract
+
+    TELEPORT(Primary)
+    task.wait(1)
+
+    fireproximityprompt(DialogueInteract)
+    task.wait(0.85)
+
+    for _, AttemptingQuest in pairs(AcceptableResponses) do
+        GetResponse:InvokeServer({
+            "Clan Head",
+            AttemptingQuest
+        }) 
+        task.wait(0.25)
+    end
+end
+
+local function CLOSE_COLLECT_MENU()
+    local v_u_18 = require(game:GetService("ReplicatedStorage").Dependencies.Global)
+
+    PlayerGui.Loot.Results.Visible = true
+    PlayerGui.Loot.Results.Visible = false
+
+    v_u_18.tweenWait(PlayerGui.Loot.Results, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+        ["Size"] = UDim2.new(0, 0, 0, 0)
+    })
+    v_u_18.clearJunk(PlayerGui.Loot.Results.Main.ScrollingFrame)
+
+    PlayerGui.Loot.Enabled = false
+    PlayerGui.Main.Enabled = true
+
+    v_u_18.fx(PlayerGui.UI.Unlock)
+    warn("Closed Collect Menu!")
 end
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+local function COLLECT_CHESTS()
+    while AutomaticFeatures.CollectChest and task.wait() do
+        for _, ChestFound in pairs(Objects.Drops:GetDescendants()) do
+            if ChestFound:IsA("ProximityPrompt") and ChestFound:FindFirstAncestorOfClass("Model").Name == "Chest" then
+                task.spawn(function()
+                    fireproximityprompt(ChestFound)
+                    task.wait(2)
+                    CLOSE_COLLECT_MENU()
+                end)
+            end
+        end
+    end
+end
 
 
 
@@ -589,7 +722,7 @@ local MacLib = loadstring(game:HttpGet("https://github.com/biggaboy212/Maclib/re
 
 local Window = MacLib:Window({
     Title = "Followers Of Rher",
-    Subtitle = "Developed by | rh4r",
+    Subtitle = "Developed by | rh4r / sinfuloni",
     Size = UDim2.fromOffset(868, 650),
     DragStyle = 1,
     DisabledWindowControls = {},
@@ -675,6 +808,47 @@ BossTab:Toggle({
 	end,
 })
 
+local KillAura = AutoTab:Section({
+  Side = "Right"
+})
+
+KillAura:Header({
+  Text = "Auto Kill Aura"
+})
+
+KillAura:Slider({
+	Name = "Distance",
+	Default = 100,
+	Minimum = 0,
+	Maximum = 1000,
+	DisplayMethod = "Round",
+	Callback = function(Value)
+		BoolsForConfig.KillAuraRadius = Value
+	end,
+})
+
+KillAura:Colorpicker({
+	Name = "Display Color",
+	Default = Color3.fromRGB(147, 1, 0),
+	Alpha = 0,
+	Callback = function(color, alpha)
+		local r, g, b = math.round(color.R * 255), math.round(color.G * 255), math.round(color.B * 255)
+
+		BoolsForConfig.KillAuraColor = Color3.fromRGB(r,g,b)
+        print(BoolsForConfig.KillAuraColor)
+	end,
+})
+
+KillAura:Toggle({
+	Name = "Enable",
+	Default = false,
+	Callback = function(value)
+        AutomaticFeatures.EnableKillAura = value
+
+        KILL_AURA()
+	end,
+})
+
 local InvestigationTab = AutoTab:Section({
   Side = "Left"
 })
@@ -702,6 +876,25 @@ InvestigationTab:Toggle({
         return
 	end,
 })
+
+local ChestCollectTab = AutoTab:Section({
+  Side = "Right"
+})
+
+ChestCollectTab:Header({
+  Text = "Auto Collect Chests"
+})
+
+ChestCollectTab:Toggle({
+	Name = "Enable",
+	Default = false,
+	Callback = function(value)
+        AutomaticFeatures.CollectChest = value
+
+        COLLECT_CHESTS()
+	end,
+})
+
 
 local TailsmenTab = AutoTab:Section({
   Side = "Left"
@@ -754,7 +947,7 @@ AlwaysBlackFlash:Toggle({
 })
 
 local StoryTab = AutoTab:Section({
-  Side = "Right"
+  Side = "Left"
 })
 
 StoryTab:Header({
@@ -834,7 +1027,7 @@ MainTab:Header({
 MainTab:Button({
 	Name = "Enable",
 	Callback = function()
-		return
+		REDEEM_CODES()
 	end,
 })
 
@@ -846,31 +1039,11 @@ DisplayTabs:Header({
   Text = "Display Cursed Market"
 })
 
-DisplayTabs:Paragraph({
-  Header = "Current Market",
-  Body = "Place holder text: $9e9"
-})
 
 DisplayTabs:Button({
 	Name = "Refresh",
 	Callback = function()
-		return
-	end,
-})
-
-
-local ChangeTheme = MiscTab:Section({
-  Side = "Left"
-})
-
-ChangeTheme:Header({
-  Text = "Change UI Theme"
-})
-
-ChangeTheme:Button({
-	Name = "Nihil",
-	Callback = function()
-		return
+		fireproximityprompt(Objects.NPCs["Curse Market"].DialogueInteract)
 	end,
 })
 
@@ -882,14 +1055,32 @@ CashMarket:Header({
   Text = "Display Cash Market"
 })
 
-CashMarket:Paragraph({
-  Header = "Current Market",
-  Body = "Place holder text: $9e9"
-})
-
 CashMarket:Button({
 	Name = "Refresh",
 	Callback = function()
-		return
+		fireproximityprompt(Objects.NPCs["Cash Market"].DialogueInteract)
+	end,
+})
+
+local RefreshGlobals = MiscTab:Section({
+  Side = "Left"
+})
+
+RefreshGlobals:Header({
+  Text = "Refresh All Script Toggles (FIX)"
+})
+
+RefreshGlobals:Button({
+	Name = "Refresh",
+	Callback = function()
+		foreach(cyn.Configuration, function(t,_)
+            if type(t) == "table" then
+                foreach(t, function(k,v)
+                    if type(v) == "boolean" then
+                        v = false
+                    end
+                end)
+            end
+        end)
 	end,
 })
