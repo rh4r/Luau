@@ -3,7 +3,8 @@
     Description: 
         This is a private script for Jujutsu Infinite.
     Credits: 
-        rh4r - everything
+        rh4r / oni - functionality
+        library: https://brady-xyz.gitbook.io/maclib-ui-library
     Game Link:
         https://www.roblox.com/games/10450270085/Jujutsu-Infinite
     Last Update:
@@ -15,18 +16,19 @@
             + Dropped item ESP
             + Cursed spirit ESP
         Autos:
+            + Auto Use Skills (DONE)
             + Auto Farm Daily
             + Auto Collect Chests (DONE)
             + Auto Farm Calamity
             + Auto Collect Tailsmen (DONE)
-            + Auto area quests
+            + Auto area quests (DONE)
             + Auto Kill Aura (DONE)
-            + Auto story quests
+            + Auto story quests (ON-HOLD)
             + Auto perfect parry
             + Automatic boss farm
-            + Automatic investigation farm
-            + Always hit blackflash / chant
-            + Auto use items
+            + Automatic investigation farm (IN-PROGRESS)
+            + Always hit blackflash (DONE)
+            + Auto use items (DONE)
             + Auto collect items
             + Auto Sell items
         Misc Features:
@@ -44,6 +46,7 @@ local cyn = getgenv()
 
 cyn.Configuration = {
     ["AutomaticFeatures"] = {
+        ["UseSkill"] = false,
         ["AutoM1"] = false,
         ["CollectChest"] = false,
         ["EnableKillAura"] = false,
@@ -54,16 +57,23 @@ cyn.Configuration = {
         ["BossFarm"] = false,
         ["InvestigationFarm"] = false,
         ["AlwaysHitFocusNeedle"] = false,
+        ["AutoBlackFlash"] = false,
     },
     ["MiscFeatures"] = {
-        nil,
+        ["UseExpAndMasBuff"] = false,
+        ["ConsumeItem"] = false
     },
     ["ESPFeatures"] = {
         ["Player"] = false,
+        ["BetterGourd"] = false
     },
     ["BoolConfigNumbers"] = {
         ["KillAuraRadius"] = 100,
         ["KillAuraColor"] = Color3.fromRGB(147, 1, 0),
+    },
+    ["ScriptNotifiers"] = {
+        ["InCombat"] = false,
+        ["InInvestigation"] = false
     }
 }
 
@@ -84,6 +94,7 @@ local AutomaticFeatures = cyn.Configuration.AutomaticFeatures
 local MiscFeatures = cyn.Configuration.MiscFeatures
 local ESPFeatures = cyn.Configuration.ESPFeatures
 local BoolsForConfig = cyn.Configuration.BoolConfigNumbers
+local ScriptNotifiers = cyn.Configuration.ScriptNotifiers
 
 local floor = math.floor
 local random = math.random
@@ -164,6 +175,9 @@ local M1ArgumentsTable = {}
 
 -- // UI Functionality Variables \\ -- 
 local SelectedArea = nil
+local SelectedItems = {}
+local SelectedSpecificItem = nil
+local SelectedInterval = nil
 
  -- // Functions & Remote Events \\ -- 
 local Objects = workspace.Objects
@@ -172,20 +186,24 @@ local MobPath = Objects.Mobs
 local ControlsTable = ReplicatedFirst.Dependencies.Controls
 
 local ServerEvents = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Server")
-local PlayerMissions = ReplicatedStorage:WaitForChild("Missions"):WaitForChild(LocalPlayer.Name)
 
 local DataEvent = ServerEvents:WaitForChild("Data")
 local Combat = ServerEvents:WaitForChild("Combat")
 
 local Skydive = Combat:WaitForChild("Skydive")
 local M1 = Combat:WaitForChild("M1")
+local M2 = Combat:WaitForChild("M2")
+local Skill = Combat:WaitForChild("Skill")
+local ApplyBlackFlashToNextHitbox = Combat:WaitForChild("ApplyBlackFlashToNextHitbox")
 
 local RedeemFunc = DataEvent:WaitForChild("RedeemCode")
+local EquipItem = DataEvent:WaitForChild("EquipItem")
 local ClaimFunc = DataEvent:WaitForChild("ClaimQuest")
 local RerollMissions = DataEvent:WaitForChild("RerollMissions")
 
 local ReplicatedTempData = LocalPlayer:WaitForChild("ReplicatedTempData")
-local Client = LocalPlayer.PlayerScripts:WaitForChild("Client")
+local inventory = LocalPlayer.ReplicatedData.inventory
+local techniques = LocalPlayer.ReplicatedData.techniques
 
 local GetResponse = ServerEvents:WaitForChild("Dialogue"):WaitForChild("GetResponse")
 
@@ -271,7 +289,7 @@ local function RETURN_HIGHEST_QUEST_PRIORITY()
     }
 
     local CurrentQuests = {}
-    local TempHolderValue
+    local HighestPrio = 999
 
     for quest_index, quest in pairs(CardsToFilter:GetChildren()) do
         if quest:IsA("Frame") then
@@ -287,13 +305,11 @@ local function RETURN_HIGHEST_QUEST_PRIORITY()
 
 
     for quest_no, quest_value in pairs(CurrentQuests) do
-        local HighestPrio = 999
         local QuestText = quest_value[1]; warn("Quest Text: ", QuestText)
         local QuestPrio = PriorityQueue[QuestText]; warn("Quest Priority: ", QuestPrio)
 
-        if ChosenQuest == nil and QuestPrio <= HighestPrio and quest_value[2]:FindFirstChild("Info") and not sfind(quest_value[1], "Capture") then
+        if QuestPrio <= HighestPrio and quest_value[2]:FindFirstChild("Info") and not sfind(quest_value[1], "Capture") then
             ChosenQuest = quest_value[2]; warn("Chosen Quest: ", ChosenQuest)
-            TempHolderValue = quest_value[1]
             HighestPrio = QuestPrio; warn("New Highest Priority: ", HighestPrio)
         end
     end
@@ -302,7 +318,6 @@ local function RETURN_HIGHEST_QUEST_PRIORITY()
         print("L capture blud rerolling...")
 
         table.clear(CurrentQuests)
-        TempHolderValue = nil
 
         RerollMissions:InvokeServer(SelectedArea)
         task.wait(3)
@@ -398,6 +413,7 @@ local function TRAIL_MOB(MobObject: Model)
 
     if VALIDATE_OBJECT(LocalRoot) and VALIDATE_OBJECT(PrimaryPart) then
         LocalRoot.Orientation = PrimaryPart.Orientation
+        ScriptNotifiers.InCombat = true
 
         if not string.find(MobObject.Name, "Curse") then
             TELEPORT_WITH_OFFSET(PrimaryPart, 0, 3, 2)    
@@ -408,6 +424,8 @@ local function TRAIL_MOB(MobObject: Model)
 end
 
 local function CLAIM_AREA_QUEST(CurrentArea: string)
+    local PlayerMissions = ReplicatedStorage:WaitForChild("Missions"):WaitForChild(LocalPlayer.Name)
+
     local HighestPrioQuest = RETURN_HIGHEST_QUEST_PRIORITY()     
     local QuestIndexToNumber = GET_NUMBER_FROM_QUEST(tostring(HighestPrioQuest))
 
@@ -452,16 +470,18 @@ end
 
 local function AREA_QUESTS()
     while AutomaticFeatures.AreaQuest and task.wait() do
+        if not AutomaticFeatures.AreaQuest then break end
         CLAIM_AREA_QUEST(SelectedArea)
         task.wait(0.5)
 
         SKYDIVE()
-        task.wait(5)
 
         local MobsToAttack = ONLY_CLOSE_MOBS()
 
         for index, enemy_npc in pairs(MobsToAttack) do
-            while MOB_HAS_HEALTH_OBJECT(enemy_npc) and AutomaticFeatures.AreaQuest do
+            while AutomaticFeatures.AreaQuest and MOB_HAS_HEALTH_OBJECT(enemy_npc) do
+                if not AutomaticFeatures.AreaQuest then break end
+
                 task.spawn(function()
                     TRAIL_MOB(enemy_npc)
                 end)
@@ -470,6 +490,7 @@ local function AREA_QUESTS()
                 task.wait(0.3)
             end 
         end
+        ScriptNotifiers.InCombat = false
     end
 end
 
@@ -492,67 +513,55 @@ local function KILL_AURA()
 
         for _, MobInstance in pairs(CloseMobs) do
             while MOB_HAS_HEALTH_OBJECT(MobInstance) do
+                ScriptNotifiers.InCombat = true
+
                 TRAIL_MOB(MobInstance)
                 AUTO_M1()
                 task.wait(0.3) 
             end
         end 
+        ScriptNotifiers.InCombat = false
     end
 end
 
 local function RETURN_STORYLINE_NPC()
     local NPC_Folder = Objects.NPCs:GetDescendants()
     local StorylineNPCRoot = PlayerGui.StorylineMarker.Adornee:GetFullName()
-    local NPC_Object
-    
-    for _, NpcChild in pairs(NPC_Folder) do
-        if NpcChild == StorylineNPCRoot then
-            NPC_Object = NpcChild:FindFirstAncestorOfClass("Model")
+
+    for _, ChildName in pairs(NPC_Folder) do
+        if ChildName:IsA("Part") and ChildName:GetFullName() == StorylineNPCRoot then
+            return ChildName:FindFirstAncestorOfClass("Model")
         end
     end
-    return 
 end
 
 local function RETURN_STORYLINE_ARGS()
-       local t = filtergc("table", {
-            Key = {"Accept/NS_Q1_BanditOutpost_Start"}
-        })
+    local FoundValues = nil
 
-        local CopyString = {}
-
-        if t then
-            for i, v in ipairs(t) do
-                if v == "Accept/NS_Q1_BanditOutpost_Start" then
-                    for offset = 3, math.min(200, i - 1) do
-                        local NewIndex = i - offset
-                        local NewVal = t[NewIndex]
-
-                        if type(NewVal) ~= "string" then
-                            break
-                        end
-
-                        if find(NewVal, "NS_") then
-                            insert(CopyString, NewVal)
-                        end
-                    end
-
+    for i, CurrentTable in pairs(getgc(true)) do
+        if type(CurrentTable) == "table" and #CurrentTable > 1 then
+            for i, CurrentValue in CurrentTable do
+                if type(CurrentValue) == "string" and string.find(CurrentValue, "Accept/NS_") then
+                    FoundValues = CurrentValue
                 end
             end
         end
-    return CopyString
+    end
+
+    return FoundValues
 end
 
 local function AUTO_STORYLINE()
     --[[
-        local args = {
-        "Clan Head",
-        "Accept/NS_Q1_BanditOutpost_Start"
-    }
-    GetResponse:InvokeServer(unpack(args))
+local args = {
+	"Clan Head",
+	"Accept/NS_Q1_BanditOutpost_Start"
+}
+game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Server"):WaitForChild("Dialogue"):WaitForChild("GetResponse"):InvokeServer(unpack(args))
 
     ]]
 
-    local AcceptableResponses = RETURN_STORYLINE_ARGS()
+    local AcceptableResponse = RETURN_STORYLINE_ARGS()
     local CurrentStoryNpc = RETURN_STORYLINE_NPC()
     local Primary = CurrentStoryNpc.PrimaryPart
     local DialogueInteract = CurrentStoryNpc.DialogueInteract
@@ -561,15 +570,28 @@ local function AUTO_STORYLINE()
     task.wait(1)
 
     fireproximityprompt(DialogueInteract)
-    task.wait(0.85)
+    task.wait(2)
 
-    for _, AttemptingQuest in pairs(AcceptableResponses) do
-        GetResponse:InvokeServer({
-            "Clan Head",
-            AttemptingQuest
-        }) 
-        task.wait(0.25)
-    end
+    warn(AcceptableResponse)
+
+    local SendingArgs = {
+        "Clan Head",
+        AcceptableResponse
+    }
+
+    GetResponse:InvokeServer(unpack(SendingArgs)) 
+    print("Attempted arg: ", AcceptableResponse)
+    task.wait(0.5)
+    
+    task.spawn(function()
+        for i, ProxPrompt in pairs(workspace.Objects.MissionItems:GetDescendants()) do
+            if ProxPrompt:IsA("ProximityPrompt") then
+                TELEPORT(ProxPrompt.Parent)
+                task.wait(0.25)
+                fireproximityprompt(ProxPrompt)
+            end
+        end
+    end)
 end
 
 local function CLOSE_COLLECT_MENU()
@@ -601,6 +623,154 @@ local function COLLECT_CHESTS()
                     CLOSE_COLLECT_MENU()
                 end)
             end
+        end
+    end
+end
+
+local function REFRESH_SELECTED_ITEMS()
+    for i, ChildItem in pairs(inventory:GetChildren()) do
+        insert(SelectedItems, ChildItem.Name)
+    end
+end
+
+local function USE_SELECTED_ITEM(item_to_use: string)
+    EquipItem:InvokeServer(item_to_use)
+end
+
+local function AUTO_DO_EXP_AND_MAS_BUFF()
+    while MiscFeatures.UseExpAndMasBuff do
+        for i = 1,3 do 
+            USE_SELECTED_ITEM("Takoyaki")
+            print("done one")
+            task.wait(0.25)
+            USE_SELECTED_ITEM("Dorayaki")
+            print("done two")
+        end 
+        task.wait(600)
+    end
+end
+
+local function DO_BETTER_AUTO_GOURD()
+    while MiscFeatures.BetterGourd do
+        local Gourds = {
+            "Focus Gourd",
+            "Damage Gourd",
+            "Agility Vial"
+        }
+
+        for i, gourd in pairs(Gourds) do
+            USE_SELECTED_ITEM(gourd)
+        end
+        task.wait(120)
+    end
+end
+
+local function AUTO_BLACKFLASH()
+    while AutomaticFeatures.AutoBlackFlash do
+        if not AutomaticFeatures.AutoBlackFlash then break end
+        if ScriptNotifiers.InCombat then
+            task.spawn(function()
+                ApplyBlackFlashToNextHitbox:FireServer(3)
+                M2:FireServer(2)
+            end)
+            task.wait(0.4)
+        else
+            task.wait(0.05)
+        end
+    end
+end
+
+local function DO_ALL_SKILLS()
+    while AutomaticFeatures.UseSkill do
+        local SkillNames = {}
+
+        for i, technique in pairs(techniques.innates:GetChildren()) do
+            insert(SkillNames, technique.Value)    
+        end
+        for i, innate_skill in pairs(SkillNames) do
+            task.spawn(function()
+                Skill:FireServer(innate_skill)
+            end)
+            task.wait(0.25) 
+        end 
+        task.wait(3)
+    end
+end
+
+local function COLLECT_CURSED_ITEMS()
+    local MissionItems = Objects.MissionItems
+
+    for i, CursedObject in pairs(MissionItems:GetChildren()) do
+        if CursedObject.Name ~= "Civillian" then
+            TELEPORT(CursedObject)
+            task.wait(0.25)
+            fireproximityprompt(CursedObject.Collect)
+            task.wait() 
+        end
+    end
+end
+
+local function KILL_INVES_BOSS()
+    local Mobs = Objects.Mobs
+    local FoundBoss = false
+
+    for a, MobObj in pairs(Mobs:GetChildren()) do
+        if not sfind(MobObj.Name, "Curse") then
+            FoundBoss = true
+            while MOB_HAS_HEALTH_OBJECT(MobObj) do
+                TRAIL_MOB(MobObj) 
+                AUTO_M1()
+                task.wait(0.3)
+            end
+        end
+    end 
+
+    if not FoundBoss then
+        for a, CurseMobObj in pairs(Mobs:GetChildren()) do
+            while MOB_HAS_HEALTH_OBJECT(CurseMobObj) do
+                TRAIL_MOB(CurseMobObj) 
+                AUTO_M1()
+                task.wait(0.3)
+            end
+        end
+    end
+    task.wait()
+end
+
+local function RESCUE_NPCS()
+    local MissionItems = Objects.MissionItems
+    local GateLocations = {
+        ["Inves1"] = CFrame.new(-4368, -331, 3573)
+    }
+    local CurrentInvestigation = "Inves1"
+    local LocalRoot = ReturnLocalRoot()
+
+    for i, CivillianToCarry in pairs (MissionItems:GetChildren()) do
+        if CivillianToCarry.Name == "Civillian" then
+            TELEPORT(CivillianToCarry)
+            task.wait(0.25)
+            fireproximityprompt(CivillianToCarry.Pickup)
+            task.wait(0.1)
+            LocalRoot.CFrame = GateLocations[CurrentInvestigation]
+            task.wait(0.1)
+        end
+    end
+end
+
+local function GOTO_INVESTIGATIONS()
+    return
+end
+
+local function AUTO_INVESTIGATION()
+    while AutomaticFeatures.InvestigationFarm do
+        if #Objects.MissionItems:GetChildren() > 0 then
+            COLLECT_CURSED_ITEMS()
+        end
+        if #Objects.Mobs:GetChildren() > 0 then
+            KILL_INVES_BOSS()
+        end 
+        if Objects.MissionItems:FindFirstChild("Civillian") then
+            RESCUE_NPCS()
         end
     end
 end
@@ -675,44 +845,7 @@ local function PLAYER_ESP()
         end
     end)
 end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ 
 
 
 
@@ -722,7 +855,7 @@ local MacLib = loadstring(game:HttpGet("https://github.com/biggaboy212/Maclib/re
 
 local Window = MacLib:Window({
     Title = "Followers Of Rher",
-    Subtitle = "Developed by | rh4r / sinfuloni",
+    Subtitle = "Developed by | rh4r / oni",
     Size = UDim2.fromOffset(868, 650),
     DragStyle = 1,
     DisabledWindowControls = {},
@@ -734,7 +867,11 @@ local Window = MacLib:Window({
 local TabGroup = Window:TabGroup()
 
 local AutoTab = TabGroup:Tab({
-  Name = "Auto Functions",
+  Name = "Main Functions",
+})
+
+local MoreMain = TabGroup:Tab({
+  Name = "More Main Functions",
 })
 
 local ESPTab = TabGroup:Tab({
@@ -773,8 +910,8 @@ MainTab:Toggle({
 	Name = "Complete Quests In Area",
 	Default = false,
 	Callback = function(value)
-        AutomaticFeatures.AutoM1 = true
-        AutomaticFeatures.AreaQuest = true
+        cyn.Configuration.AutomaticFeatures.AutoM1 = value
+        cyn.Configuration.AutomaticFeatures.AreaQuest = value
 
         AREA_QUESTS()
 	end,
@@ -843,7 +980,7 @@ KillAura:Toggle({
 	Name = "Enable",
 	Default = false,
 	Callback = function(value)
-        AutomaticFeatures.EnableKillAura = value
+        cyn.Configuration.AutomaticFeatures.EnableKillAura = value
 
         KILL_AURA()
 	end,
@@ -873,7 +1010,9 @@ InvestigationTab:Toggle({
 	Name = "Enable",
 	Default = false,
 	Callback = function(value)
-        return
+        AutomaticFeatures.InvestigationFarm = value
+
+        AUTO_INVESTIGATION()
 	end,
 })
 
@@ -889,7 +1028,7 @@ ChestCollectTab:Toggle({
 	Name = "Enable",
 	Default = false,
 	Callback = function(value)
-        AutomaticFeatures.CollectChest = value
+        cyn.Configuration.AutomaticFeatures.CollectChest = value
 
         COLLECT_CHESTS()
 	end,
@@ -908,13 +1047,93 @@ TailsmenTab:Toggle({
 	Name = "Enable",
 	Default = false,
 	Callback = function(value)
-        AutomaticFeatures.Tailsmen = value
+        cyn.Configuration.AutomaticFeatures.Tailsmen = value
 
         COLLECT_ALL_TAILSMEN()
 	end,
 })
 
-local PerfectTab = AutoTab:Section({
+
+local StoryTab = AutoTab:Section({
+  Side = "Left"
+})
+
+StoryTab:Header({
+  Text = "Auto Story Quest"
+})
+
+StoryTab:Toggle({
+	Name = "Enable",
+	Default = false,
+	Callback = function(value)
+        AUTO_STORYLINE()
+	end,
+})
+
+
+
+-- // More Main \\ -- 
+
+local UseSkill = MoreMain:Section({
+  Side = "Left"
+})
+
+UseSkill:Header({
+  Text = "Auto Use Skills"
+})
+
+UseSkill:Toggle({
+	Name = "Enable",
+	Default = false,
+	Callback = function(value)
+        AutomaticFeatures.UseSkill = value
+
+        DO_ALL_SKILLS()
+	end,
+})
+
+local DoM1 = MoreMain:Section({
+  Side = "Right"
+})
+
+DoM1:Header({
+  Text = "Auto M1"
+})
+
+DoM1:Toggle({
+	Name = "Enable",
+	Default = false,
+	Callback = function(value)
+        cyn.Configuration.AutomaticFeatures.AutoM1 = value
+
+        AUTO_M1()
+	end,
+})
+
+local AlwaysBlackFlash = MoreMain:Section({
+  Side = "Left"
+})
+
+AlwaysBlackFlash:Header({
+  Text = "Auto Black Flash"
+})
+
+AlwaysBlackFlash:Toggle({
+	Name = "Enable",
+	Default = false,
+	Callback = function(value)
+        cyn.Configuration.AutomaticFeatures.AutoBlackFlash = value
+
+        AUTO_BLACKFLASH()
+	end,
+})
+
+AlwaysBlackFlash:Label({
+  Text = "RISK LEVEL: Medium"
+})
+
+
+local PerfectTab = MoreMain:Section({
   Side = "Right"
 })
 
@@ -930,51 +1149,87 @@ PerfectTab:Toggle({
 	end,
 })
 
-local AlwaysBlackFlash = AutoTab:Section({
-  Side = "Right"
-})
-
-AlwaysBlackFlash:Header({
-  Text = "Auto Hit Black Flash / Chant"
-})
-
-AlwaysBlackFlash:Toggle({
-	Name = "Enable",
-	Default = false,
-	Callback = function(value)
-        return
-	end,
-})
-
-local StoryTab = AutoTab:Section({
+local AutoConsume = MoreMain:Section({
   Side = "Left"
 })
 
-StoryTab:Header({
-  Text = "Auto Story Quest"
+AutoConsume:Header({
+  Text = "Auto Consume Items"
 })
 
-StoryTab:Toggle({
+REFRESH_SELECTED_ITEMS()
+AutoConsume:Dropdown({
+	Name = "Select Items",
+	Search = true,
+	Multi = true,
+	Required = false,
+	Options = SelectedItems,
+	Default = {""},
+	Callback = function(Value)
+        SelectedSpecificItem = SelectedItems[Value]
+	end,
+})
+
+AutoConsume:Input({
+	Name = "Interval Per Use (Seconds)",
+	Placeholder = "60",
+	AcceptedCharacters = "All",
+	Callback = function(input)
+        SelectedInterval = tonumber(input)
+	end,
+})
+
+AutoConsume:Toggle({
 	Name = "Enable",
 	Default = false,
 	Callback = function(value)
-        return
+        MiscFeatures.ConsumeItem = value
+
+        while MiscFeatures.ConsumeItem do
+            USE_SELECTED_ITEM(SelectedSpecificItem)
+            task.wait(SelectedInterval)
+        end
 	end,
 })
 
 
+local AutoMasAndExp = MoreMain:Section({
+  Side = "Right"
+})
+
+AutoMasAndExp:Header({
+  Text = "Auto Consume Master + EXP Buff"
+})
 
 
+AutoMasAndExp:Toggle({
+	Name = "Enable",
+	Default = false,
+	Callback = function(value)
+        MiscFeatures.UseExpAndMasBuff = value
+
+        AUTO_DO_EXP_AND_MAS_BUFF()
+	end,
+})
+
+local BetterAutoBuff = MoreMain:Section({
+  Side = "Left"
+})
+
+BetterAutoBuff:Header({
+  Text = "Better Auto Buff (Game one is buggy)"
+})
 
 
+BetterAutoBuff:Toggle({
+	Name = "Enable",
+	Default = false,
+	Callback = function(value)
+        MiscFeatures.BetterGourd = value
 
-
-
-
-
-
-
-
+        DO_BETTER_AUTO_GOURD()
+	end,
+})
 
 
 -- // ESP UI Functions \\ -- 
@@ -993,24 +1248,6 @@ MainTab:Button({
 		return
 	end,
 })
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
