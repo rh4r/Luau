@@ -31,6 +31,7 @@
             + Auto use items (DONE)
             + Auto collect items
             + Auto Sell items
+            + Auto Use RCT (DONE)
         Misc Features:
             + Redeem all codes (DONE)
             + Build saving + loading
@@ -58,6 +59,7 @@ cyn.Configuration = {
         ["InvestigationFarm"] = false,
         ["AlwaysHitFocusNeedle"] = false,
         ["AutoBlackFlash"] = false,
+        ["AutoRCT"] = false,
     },
     ["MiscFeatures"] = {
         ["UseExpAndMasBuff"] = false,
@@ -178,6 +180,14 @@ local SelectedArea = nil
 local SelectedItems = {}
 local SelectedSpecificItem = nil
 local SelectedInterval = nil
+local DisplayInvestigations = {
+    "Cursed School",
+    "Yasohachi Bridge",
+    "Tokyo Subway",
+    "Eerie Farm",
+    "Detention Center",
+}
+local ChosenInvestigation = nil
 
  -- // Functions & Remote Events \\ -- 
 local Objects = workspace.Objects
@@ -194,6 +204,7 @@ local Skydive = Combat:WaitForChild("Skydive")
 local M1 = Combat:WaitForChild("M1")
 local M2 = Combat:WaitForChild("M2")
 local Skill = Combat:WaitForChild("Skill")
+local ReverseHeal = Combat:WaitForChild("ReverseHeal")
 local ApplyBlackFlashToNextHitbox = Combat:WaitForChild("ApplyBlackFlashToNextHitbox")
 
 local RedeemFunc = DataEvent:WaitForChild("RedeemCode")
@@ -697,11 +708,20 @@ local function DO_ALL_SKILLS()
     end
 end
 
+local function DO_REVERSE_CURSE_TECHNIQUE()
+    while AutomaticFeatures.AutoRCT do
+        task.spawn(function()
+            ReverseHeal:InvokeServer(2) 
+        end)
+        task.wait(3)
+    end
+end
+
 local function COLLECT_CURSED_ITEMS()
     local MissionItems = Objects.MissionItems
 
     for i, CursedObject in pairs(MissionItems:GetChildren()) do
-        if CursedObject.Name ~= "Civillian" then
+        if CursedObject.Name ~= "Civilian" and CursedObject.Collect then
             TELEPORT(CursedObject)
             task.wait(0.25)
             fireproximityprompt(CursedObject.Collect)
@@ -718,21 +738,38 @@ local function KILL_INVES_BOSS()
         if not sfind(MobObj.Name, "Curse") then
             FoundBoss = true
             while MOB_HAS_HEALTH_OBJECT(MobObj) do
-                TRAIL_MOB(MobObj) 
-                AUTO_M1()
+                ScriptNotifiers.InCombat = true
+
+                task.spawn(function()
+                    TRAIL_MOB(MobObj) 
+                    AUTO_M1()
+                end)
+
                 task.wait(0.3)
             end
         end
-    end 
+    end
+
+    ScriptNotifiers.InCombat = false
+ 
 
     if not FoundBoss then
         for a, CurseMobObj in pairs(Mobs:GetChildren()) do
             while MOB_HAS_HEALTH_OBJECT(CurseMobObj) do
-                TRAIL_MOB(CurseMobObj) 
-                AUTO_M1()
+                ScriptNotifiers.InCombat = true
+
+                task.spawn(function()
+                    TRAIL_MOB(CurseMobObj) 
+                    AUTO_M1()
+                end)
+
                 task.wait(0.3)
             end
+            if a >= 10 then
+                break
+            end
         end
+        ScriptNotifiers.InCombat = false
     end
     task.wait()
 end
@@ -740,18 +777,22 @@ end
 local function RESCUE_NPCS()
     local MissionItems = Objects.MissionItems
     local GateLocations = {
-        ["Inves1"] = CFrame.new(-4368, -331, 3573)
+        ["Cursed School"] = CFrame.new(-4368, -331, 3573),
+        ["Yasohachi Bridge"] = CFrame.new(),
+        ["Tokyo Subway"] = CFrame.new(),
+        ["Eerie Farm"] = CFrame.new(),
+        ["Detention Center"] = CFrame.new(),
     }
-    local CurrentInvestigation = "Inves1"
+
     local LocalRoot = ReturnLocalRoot()
 
     for i, CivillianToCarry in pairs (MissionItems:GetChildren()) do
-        if CivillianToCarry.Name == "Civillian" then
-            TELEPORT(CivillianToCarry)
+        if CivillianToCarry.Name == "Civilian" and CivillianToCarry.Pickup then
+            TELEPORT(CivillianToCarry.PrimaryPart)
             task.wait(0.25)
             fireproximityprompt(CivillianToCarry.Pickup)
             task.wait(0.1)
-            LocalRoot.CFrame = GateLocations[CurrentInvestigation]
+            LocalRoot.CFrame = GateLocations[ChosenInvestigation]
             task.wait(0.1)
         end
     end
@@ -763,15 +804,21 @@ end
 
 local function AUTO_INVESTIGATION()
     while AutomaticFeatures.InvestigationFarm do
-        if #Objects.MissionItems:GetChildren() > 0 then
-            COLLECT_CURSED_ITEMS()
-        end
-        if #Objects.Mobs:GetChildren() > 0 then
-            KILL_INVES_BOSS()
-        end 
-        if Objects.MissionItems:FindFirstChild("Civillian") then
-            RESCUE_NPCS()
-        end
+        task.wait()
+        task.spawn(function()
+            if Objects.MissionItems:FindFirstChild("Civilian") then
+                RESCUE_NPCS()
+            end
+            if Objects.MissionItems:GetChildren() > 0 and not Objects.MissionItems:FindFirstChild("Civilian") then
+                COLLECT_CURSED_ITEMS()
+            end
+            if #Objects.Mobs:GetChildren() > 0 then
+                KILL_INVES_BOSS()
+            end 
+            if #Objects.MissionItems:GetChildren() <= 0 and #Objects.Mobs:GetChildren() <= 0 then
+                task.wait(0.05)
+            end
+        end)
     end
 end
 
@@ -999,10 +1046,10 @@ InvestigationTab:Dropdown({
 	Search = true,
 	Multi = false,
 	Required = false,
-	Options = {"nil"},
-	Default = {"nil"},
+	Options = DisplayInvestigations,
+	Default = {""},
 	Callback = function(Value)
-        SelectedArea = Value
+        ChosenInvestigation = DisplayInvestigations[Value]
 	end,
 })
 
@@ -1211,6 +1258,31 @@ AutoMasAndExp:Toggle({
         AUTO_DO_EXP_AND_MAS_BUFF()
 	end,
 })
+
+local DoRCT = MoreMain:Section({
+  Side = "Right"
+})
+
+DoRCT:Header({
+  Text = "Auto Use Reverse Curse Technique"
+})
+
+
+DoRCT:Toggle({
+	Name = "Enable",
+	Default = false,
+	Callback = function(value)
+        AutomaticFeatures.AutoRCT = value
+
+        DO_REVERSE_CURSE_TECHNIQUE()
+	end,
+})
+
+DoRCT:Label({
+  Text = "(( Requires Focus Tokens ))"
+})
+
+
 
 local BetterAutoBuff = MoreMain:Section({
   Side = "Left"
