@@ -24,6 +24,8 @@ local config = {
             ["Team"] = "All"
         },
         ["Sprint"] = false,
+        ["Reload"] = false,
+        ["Swap"] = false
     },
     ["Blatant"] = {
         ["Aimlock"] = {
@@ -31,6 +33,12 @@ local config = {
             ["AimLockPart"] = "Head",
             ["AimlockKeybind"] = Enum.KeyCode.E
         },
+        ["Mods"] = {
+            ["Enabled"] = false,
+            ["Weapon"] = "",
+            ["FireRate"] = 999,
+            ["Automatic"] = false,
+        }
     },
     ["Misc"] = {
         ["Pickup"] = false,
@@ -91,27 +99,45 @@ end
 -- // Shortens \\ -- 
 local insert = table.insert
 local find = table.find
+local clear = table.clear
 
 -- // Variables \\ -- 
-
-local Camera = workspace.CurrentCamera
 local Players = Services.Players or game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 local RunService = Services.RunService or game:GetService("RunService")
 local ReplicatedStorage = Services.ReplicatedStorage or game:GetService("ReplicatedStorage")
-local Teams = game:GetService("Teams")
+local Teams = Services.Teams or game:GetService("ReplicatedStorage")
 local TeleportService = Services.TeleportService or game:GetService("TeleportService")
-local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local PrisonItemsGiver = workspace:WaitForChild("Prison_ITEMS"):WaitForChild("giver")
+
 local RemotesFolder = ReplicatedStorage.Remotes
+local GunRemotes = ReplicatedStorage.GunRemotes
+
 local CollectRemote = RemotesFolder:WaitForChild("GiverPressed")
 local InteractWithItem = RemotesFolder:WaitForChild("InteractWithItem")
-local PrisonItemsGiver = workspace:WaitForChild("Prison_ITEMS"):WaitForChild("giver")
 local RequestTeamChange = RemotesFolder:WaitForChild("RequestTeamChange")
+local FuncReload = GunRemotes:WaitForChild("FuncReload")
+
 
 local AcceptedDropNames = {
     "Key card",
     "M9"
 }
 
+local WeaponNames = {
+    "M9",
+    "Remington 870",
+    "AK-47",
+    "M700",
+    "Revolver",
+    "M4A1",
+    "FAL",
+    "MP5"
+}
+
+local CurrentGuns = {}
 local DrawingObjects = {}
 
 -- // Main Logic \\ -- 
@@ -127,6 +153,26 @@ UserInputService.InputBegan:Connect(function(UserInput, GameProccess)
     end
 end)
 ]]--
+
+local function UPDATE_GUNS()
+    local LocalChar = RETURN_CHARACTER(LocalPlayer)
+    local LocalBackpack = LocalPlayer.Backpack
+    
+    for index, CharV in pairs(LocalChar:GetChildren()) do
+        if find(WeaponNames, CharV.Name) and not find(CurrentGuns, CharV.Name) then
+            insert(CurrentGuns, CharV.Name)
+        end
+    end
+    for index, BackV in pairs(LocalBackpack:GetChildren()) do
+        if find(WeaponNames, BackV.Name) and not find(CurrentGuns, BackV.Name) then
+            insert(CurrentGuns, BackV.Name)
+        end
+    end
+end
+
+task.spawn(function()
+    UPDATE_GUNS()
+end)
 
 local function RETURN_BOX_POS(entity)
     local HeadOffset = Vector3.new(0, 0.5, 0)
@@ -287,6 +333,15 @@ local function CAN_DAMAGE(PlayerInst: Player)
             else
                 return false
             end
+        elseif LocalTeam.Name == "Criminals" and TheirTeam.Name == "Inmates" then
+            local TheirChar = RETURN_CHARACTER(PlayerInst)
+            local Hostile = TheirChar:GetAttribute("Hostile")
+
+            if Hostile then
+                return true
+            else
+                return false
+            end
         end
     end
 end
@@ -376,7 +431,7 @@ local function AUTO_SPRINT()
     while cMain.Sprint do
         local LChar = RETURN_CHARACTER(LocalPlayer)
         
-        if LChar then
+        if LChar and LChar:FindFirstChildOfClass("Humanoid") then
             LChar:FindFirstChildOfClass("Humanoid").WalkSpeed = 24
         end
         task.wait()
@@ -476,15 +531,151 @@ local function CHANGE_TEAM()
     end
 end
 
+local function FIND_NEXT_GUN()
+    local BackPack = LocalPlayer.Backpack
+
+    if BackPack then
+        for index, ToolInstance in pairs(BackPack:GetChildren()) do
+            if find(WeaponNames, ToolInstance.Name) then
+                return ToolInstance
+            end
+        end
+    end
+end
+
+local function RETURN_CURRENT_WEAPON_TO_BACKPACK()
+    local LocalChar = RETURN_CHARACTER(LocalPlayer)
+    local LocalBackpack = LocalPlayer.Backpack
+
+    if LocalChar and LocalChar:FindFirstChildOfClass("Tool") then
+        local FoundTool = LocalChar:FindFirstChildOfClass("Tool") 
+
+        if find(WeaponNames, FoundTool.Name) then
+            FoundTool.Parent = LocalBackpack
+        end
+    end
+end
+
+local function FIND_CURRENT_WEAPON(PlayerCharacter)
+    local Current 
+
+    for index, Instance in pairs(PlayerCharacter:GetChildren()) do
+        if Instance:IsA("Tool") and find(WeaponNames, Instance.Name) then
+            Current = Instance
+        end
+    end
+    return Current
+end
+
+local function RETURN_SHOOT_FUNC()
+    local ShootFunction
+
+    for index, FoundFunction in pairs(getgc(false)) do
+        if type(FoundFunction) == "function" and islclosure(FoundFunction) then
+            local Source = debug.info(FoundFunction, "n")
+            
+            if Source and Source ~= "" and Source ~= "nil" and Source == "shoot" then
+                ShootFunction = FoundFunction
+            end
+        end
+    end
+
+    if ShootFunction then
+        return ShootFunction
+    end
+end
+
+local function SETUP_PREMOD()
+    if cBlatant.Mods.Enabled then
+        local ChosenWeapon = cBlatant.Mods.Weapon
+        local LocalChar = RETURN_CHARACTER(LocalPlayer)
+        local LocalBackpack = LocalPlayer.Backpack
+
+        if LocalChar then
+            if not find(LocalChar:GetChildren(), LocalChar:FindFirstChild(ChosenWeapon)) then
+                local FoundWeapon = LocalBackpack:FindFirstChild(ChosenWeapon)
+
+                if FoundWeapon then
+                    FoundWeapon.Parent = LocalChar
+                end
+            end
+        end
+        task.wait()
+    end
+end
+
+local function CALL_UPDATE_MODS()
+    if cBlatant.Mods.Enabled then
+        SETUP_PREMOD()
+
+        local ShootFunction = RETURN_SHOOT_FUNC()
+
+        if ShootFunction then
+            local ShootFuncUpvalues = debug.getupvalues(ShootFunction)
+
+            for index, upvalue in pairs(ShootFuncUpvalues) do
+                if type(upvalue) == "table" then
+                    for tableindex, tablevalue in pairs(upvalue) do
+
+                        if cBlatant.Mods.Automatic then
+                                if tableindex == "AutoFire" then
+                                rawset(upvalue, tableindex, true)
+                            end
+                            if tableindex == "SlotType" then
+                                rawset(upvalue, tableindex, "Primary")
+                            end 
+                        end
+                    end
+                end
+            end
+        end 
+    end
+end
+
+-- Gun Functions -- 
+task.spawn(function()
+    while task.wait() do
+        local LocalChar = RETURN_CHARACTER(LocalPlayer)
+
+        if LocalChar then
+            local CurrentWeapon = FIND_CURRENT_WEAPON(LocalChar)
+
+            if CurrentWeapon then
+                local CurrentAmmo = CurrentWeapon:GetAttribute("Local_CurrentAmmo")
+
+                if CurrentAmmo <= 0 then
+                    if cMain.Reload then
+                        task.spawn(function()
+                            FuncReload:InvokeServer()
+                            print("Reloading...")
+                        end)
+                    end
+                    if cMain.Swap then
+                        RETURN_CURRENT_WEAPON_TO_BACKPACK()
+
+                        local NextWeapon = FIND_NEXT_GUN()
+                        NextWeapon.Parent = LocalChar
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- Remove Left Player Drawing Esp -- 
 Players.PlayerRemoving:Connect(function(RemovingPlayer)
-    for plrInstance, DrawingObject in DrawingObjects do
-        if plrInstance == RemovingPlayer then
+    for index, PlrESPTable in pairs(DrawingObjects) do
+        if find(PlrESPTable, RemovingPlayer) then
+            local DrawingObject = PlrESPTable[2]
+            print("Destroying: ", DrawingObject)
+
             DrawingObject.Visible = false
             DrawingObject:Destroy()
         end
     end
 end)
 
+-- Auto Gun Pickup -- 
 LocalPlayer.CharacterAdded:Connect(function()
     if cMisc.GunPickup then
         task.wait(1)
@@ -505,6 +696,7 @@ LocalPlayer.CharacterAdded:Connect(function()
             LocalRoot.CFrame = OldRootCFrame
         end
     end
+    clear(CurrentGuns)
 end)
 
 -- // User Interface Library \\ -- 
@@ -540,6 +732,12 @@ do -- Window Section
             local tab = section:Tab({
                 Selected = true,
                 Title = "Main Features",
+                Icon = cascade.Symbols.squareStack3dUp,
+            })
+
+            local GunFeatures = section:Tab({
+                Selected = true,
+                Title = "Gun Features",
                 Icon = cascade.Symbols.squareStack3dUp,
             })
 
@@ -824,7 +1022,139 @@ do -- Window Section
                     local MainFeatures = tab:PageSection({ Title = "Auto Shoot Features" })
 
                     local MainFeatures = tab:PageSection({ Title = "Ragebot Features" })
+                
+                do
+                    local GunPage = GunFeatures:PageSection({ Title = "Gun Convience" })
+                    local GunForm = GunPage:Form()
+                    local AutoReloadGun = GunForm:Row()
+                    local AutoSwapGun = GunForm:Row()
 
+                    local GunModifiers = GunFeatures:PageSection({ Title = "Gun Select" })
+                    local ModForm = GunModifiers:Form()
+                    local EnableModdingRow = ModForm:Row()
+                    local SelectedGunToModify = ModForm:Row()
+                    local RefreshRow = ModForm:Row()
+
+                    local RealModPage = GunFeatures:PageSection({ Title = "Choose Modifiers" })
+                    local ModdingForm = RealModPage:Form()
+                    local RefreshUpdateRow = ModdingForm:Row()
+                    local AutomaticRow = ModdingForm:Row()
+                    local FirerateRow = ModdingForm:Row()
+
+                    -- // AUTO RELOAD \\ -- 
+
+                    AutoReloadGun:Left():TitleStack({
+                        Title = "Enable Reload",
+                        Subtitle = "Automatically reloads your current weapon",
+                    })
+
+                    AutoReloadGun:Right():Toggle({
+                        Value = false,
+                        ValueChanged = function(self, value: boolean)
+                            cMain.Reload = value
+                        end 
+                    })
+
+                    -- // SWAP GUN \\ -- 
+                    AutoSwapGun:Left():TitleStack({
+                        Title = "Enable Swap",
+                        Subtitle = "Automatically swaps your current weapon whilst you have no ammo",
+                    })
+
+                    AutoSwapGun:Right():Toggle({
+                        Value = false,
+                        ValueChanged = function(self, value: boolean)
+                            cMain.Swap = value
+                        end 
+                    })
+
+                    -- // GUN MODS \\ -- 
+
+                    EnableModdingRow:Left():TitleStack({
+                        Title = "Allow Mods",
+                        Subtitle = "Enables weapon modification",
+                    })
+
+                    EnableModdingRow:Right():Toggle({
+                        Value = false,
+                        ValueChanged = function(self, value: boolean)
+                            cBlatant.Mods.Enabled = value
+                        end 
+                    })
+
+                    SelectedGunToModify:Left():TitleStack({
+                        Title = "Choose a weapon to mod",
+                        Subtitle = "Selects the weapon to make modifications to",
+                    })
+
+
+                    local ModDropdown = SelectedGunToModify:Right():PopUpButton({
+                        Options = CurrentGuns,
+                        ValueChanged = function(self, value: number)
+                            cBlatant.Mods.Weapon = self.Options[value]
+                            print(cBlatant.Mods.Weapon)
+                        end,
+                    })
+
+                    
+                    RefreshRow:Left():TitleStack({
+                        Title = "Click to refresh available weapons",
+                        Subtitle = "Refreshes the script, allowing you to choose weapons to mod.",
+                    })
+
+                    local RefreshButton = RefreshRow:Right():Button({
+                        Label = "Refrersh",
+                        State = "Primary",
+                        Pushed = function(self)
+                            UPDATE_GUNS()
+                            ModDropdown.Options = CurrentGuns
+                        end,
+                    })
+
+
+                    RefreshUpdateRow:Left():TitleStack({
+                        Title = "Update weapon",
+                        Subtitle = "Modifies the new weapon with the selected modifiers.",
+                    })
+
+                    local RefreshButton = RefreshUpdateRow:Right():Button({
+                        Label = "Refrersh",
+                        State = "Primary",
+                        Pushed = function(self)
+                            CALL_UPDATE_MODS()
+                        end,
+                    })
+
+                    -- // ACTUAL GUN MODDING CHOICES \\ -- 
+
+                    AutomaticRow:Left():TitleStack({
+                        Title = "Set Automatic",
+                        Subtitle = "Allows the weapon to Auto-Fire",
+                    })
+
+                    AutomaticRow:Right():Toggle({
+                        Value = false,
+                        ValueChanged = function(self, value: boolean)
+                            cBlatant.Mods.Automatic = value
+                        end 
+                    })
+
+                    FirerateRow:Left():TitleStack({
+                        Title = "Set FireRate",
+                        Subtitle = "Enter new firerate (Lower = Faster)",
+                    })
+
+                    local FireRateTextEnter = FirerateRow:Right():TextField({
+                        Value = "",
+                        ValueChanged = function(self, value: string)
+                            cBlatant.Mods.FireRate = value
+                        end,
+                        TextChanged = function(self, value: string)
+                            print("Text changed:", value)
+                        end,
+                    })
+
+                end
                 do
                     local QoLPpage = QoLFeatures:PageSection({ Title = "Player Advantages" })
                     local QolForm = QoLFeatures:Form()
