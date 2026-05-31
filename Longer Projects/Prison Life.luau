@@ -27,6 +27,9 @@
                                                     + Jumpheight keybind
                                                     + Ragebot
                                                     + Config saving
+                                                    + Arrest certain player
+                                                    + Arrest all criminals
+                                                    + Bug Fixes
                                             
 ]]--
 
@@ -70,7 +73,12 @@ if readfile then
                 },
                 ["Sprint"] = false,
                 ["Reload"] = false,
-                ["Swap"] = false
+                ["Swap"] = false,
+            },
+            ["PlayerSettings"] = {
+                ["AutoArrest"] = false,
+                ["ArrestName"] = "",
+                ["ArrestingAll"] = false,
             },
             ["Blatant"] = {
                 ["Aimlock"] = {
@@ -108,6 +116,7 @@ end
 
 
 local cMain = config.Main
+local cPlayers = config.PlayerSettings
 local cBlatant = config.Blatant
 local cMisc = config.Misc
 local cSettings = config.Settings
@@ -142,6 +151,7 @@ end
 local insert = table.insert
 local find = table.find
 local clear = table.clear
+local remove = table.remove
 
 -- // Variables \\ -- 
 local Players = Services.Players or game:GetService("Players")
@@ -162,7 +172,8 @@ local GunRemotes = ReplicatedStorage.GunRemotes
 local CollectRemote = RemotesFolder:WaitForChild("GiverPressed")
 local InteractWithItem = RemotesFolder:WaitForChild("InteractWithItem")
 local RequestTeamChange = RemotesFolder:WaitForChild("RequestTeamChange")
-local ShootEvent = GunRemotes:WaitForChild("ShootEvent")
+local InteractWithItem = RemotesFolder:WaitForChild("InteractWithItem")
+local ArrestPlayer = RemotesFolder:WaitForChild("ArrestPlayer")
 
 local ReloadFunc 
 local ShootFunction
@@ -197,18 +208,6 @@ local CurrentGuns = {}
 local DrawingObjects = {}
 
 -- // Main Logic \\ -- 
-
---[[
-UserInputService.InputBegan:Connect(function(UserInput, GameProccess)
-    if UserInput.KeyCode == cBlatant.AimlockKeybind then
-        if cBlatant.Aimlock then
-            cBlatant.Aimlock = false
-        else
-            cBlatant.Aimlock = true
-        end
-    end
-end)
-]]--
 
 local function UPDATE_GUNS()
     local LocalChar = RETURN_CHARACTER(LocalPlayer)
@@ -256,7 +255,7 @@ local function RETURN_BOX_POS(entity)
 
     local BoxPosition = Vector2.new(
         RootPos.X - BoxWidth / 2,
-        RootPos.Y - BoxHeight / 2
+        RootPos.Y - BoxHeight / 2.4
     )
 
     return Vector2.new(BoxWidth, BoxHeight), BoxPosition, PassingOnScreenValue
@@ -497,7 +496,16 @@ local function AIMLOCK()
                     
                     if cBlatant.AutoFiring then
                         if ShootFunction then
-                            ShootFunction() 
+                            local ToSend ={
+                                ["UserInputType"] = Enum.UserInputType.MouseButton1,
+                                ["UserInputState"] = Enum.UserInputState.Begin,
+                                ["Position"] = Vector3.zero
+                            }
+
+                            task.spawn(ShootFunction(ToSend))
+                            task.wait()
+                            ToSend.UserInputState = Enum.UserInputState.End
+                            task.spawn(ShootFunction(ToSend))
                         else
                             RETURN_SHOOT_FUNC()
                         end
@@ -763,7 +771,7 @@ local function ENABLE_PHASE()
 
                     task.spawn(function()
                         HeadNewRay.Instance.CanCollide = false
-                        task.delay(3, function()
+                        task.delay(2, function()
                             HeadNewRay.Instance.CanCollide = true
                         end)
                     end)
@@ -772,7 +780,7 @@ local function ENABLE_PHASE()
 
                     task.spawn(function()
                         RootNewRay.Instance.CanCollide = false
-                        task.delay(3, function()
+                        task.delay(2, function()
                             RootNewRay.Instance.CanCollide = true
                         end)
                     end)
@@ -801,7 +809,7 @@ end
 local function EQUIP_RANDOM_WEAPON()
     if cMain.Swap then
         return
-    elseif not cMain.Swap or cMain.Swap and not RETURN_CHARACTER(LocalPlayer):FindFirstChildOfClass("Tool") then
+    else
         local LocalChar = RETURN_CHARACTER(LocalPlayer)
         local LocalBackpack = LocalPlayer.Backpack
 
@@ -816,6 +824,7 @@ local function EQUIP_RANDOM_WEAPON()
                     for index, CurrentWeapon in pairs(LocalBackpack:GetChildren()) do
                         if find(WeaponNames, CurrentWeapon.Name) then
                             CurrentWeapon.Parent = LocalChar
+                            print("equipt")
                         end
                     end
                 end
@@ -891,20 +900,23 @@ local function DO_RAGEBOT()
                 local LocalChar = RETURN_CHARACTER(LocalPlayer)
                 TheirRoot = RETURN_TARGET_PART(PlayerTargetting, "HumanoidRootPart")
                 LocalRoot = RETURN_TARGET_PART(LocalPlayer, "HumanoidRootPart")
+                local CurrentHoldWeapon = LocalChar:FindFirstChildOfClass("Tool")
 
                 if not ShootFunction then
                     RETURN_SHOOT_FUNC()
                 else
-                    local TheirLocation = Camera:WorldToScreenPoint(TheirRoot.Position)
-                    local SpoofPos = Spoof["Position"]
+                    if CurrentHoldWeapon then
+                        local TheirLocation = Camera:WorldToScreenPoint(TheirRoot.Position)
+                        local SpoofPos = Spoof["Position"]
 
-                    SpoofPos.X = TheirLocation.X
-                    SpoofPos.Y = TheirLocation.Y
+                        SpoofPos.X = TheirLocation.X
+                        SpoofPos.Y = TheirLocation.Y
 
-                    task.spawn(function()
-                        ShootFunction(Spoof)
-                    end)
-                    task.wait(cBlatant.Mods.FireRate)
+                        task.spawn(function()
+                            ShootFunction(Spoof)
+                        end)
+                        task.wait() 
+                    end
                 end
                 if TheirRoot and LocalRoot and LocalChar then
                     FirstRay = RETURN_SENT_RAY(TheirRoot, LocalRoot, LocalChar) 
@@ -921,6 +933,105 @@ local function DO_RAGEBOT()
                 FirstRay = nil
             end
         end
+    end
+end
+
+local function KILL_LP()
+    if cPlayers.AutoArrest or cPlayers.ArrestingAll then
+        local LocalChar = RETURN_CHARACTER(LocalPlayer)
+
+        if LocalChar then
+            local LocalHum = LocalChar:FindFirstChildOfClass("Humanoid")
+            LocalHum.Health = 0
+        end 
+    end
+end
+
+local function UNEQUIP_CURR_TOOL()
+    local LocalChar = RETURN_CHARACTER(LocalPlayer)
+
+    if LocalChar then
+        for _, CurrentChild in pairs(LocalChar:GetChildren()) do
+            if CurrentChild:IsA("Tool") then
+                CurrentChild.Parent = LocalPlayer.Backpack
+                task.wait()
+            end
+        end
+    end
+end
+
+local function EQUIP_HANDCUFFS()
+    local LocalBackpack = LocalPlayer.Backpack
+    local LocalChar = RETURN_CHARACTER(LocalPlayer)
+
+    if LocalChar then
+        for index, Tool in pairs(LocalBackpack:GetChildren()) do
+            if Tool.Name == "Handcuffs" then
+                UNEQUIP_CURR_TOOL()
+
+                Tool.Parent = LocalChar
+                task.wait()
+            end
+        end 
+    end
+end
+
+local function ARREST_CHOSEN_PLR(ToArrest)
+    if cPlayers.AutoArrest then
+        task.spawn(function()
+            for index, PlayerObj in pairs(Players:GetPlayers()) do
+                if PlayerObj.Name == cPlayers.ArrestName or PlayerObj.DisplayName == cPlayers.ArrestName then
+                    ToArrest = PlayerObj
+                end
+            end
+        end)
+    end
+
+    if ToArrest then
+        local PlayerChar, LocalChar = RETURN_CHARACTER(ToArrest), RETURN_CHARACTER(LocalPlayer)
+
+        if PlayerChar and LocalChar and not PlayerChar:FindFirstChildOfClass("ForceField") then
+            local PlayerRoot = RETURN_TARGET_PART(ToArrest, "HumanoidRootPart")
+            local LocalRoot = RETURN_TARGET_PART(LocalPlayer, "HumanoidRootPart")
+            local PlayerHead = RETURN_TARGET_PART(ToArrest, "Head")
+
+            if PlayerRoot and LocalRoot and PlayerHead then
+                EQUIP_HANDCUFFS()
+
+                while not PlayerHead:FindFirstChildOfClass("BillboardGui") and PlayerRoot and LocalRoot and PlayerHead do
+                    local PutBehind = CFrame.new(PlayerRoot.Position.X, PlayerRoot.Position.Y - 2, PlayerRoot.Position.Z - 2)
+                    LocalRoot.CFrame = PutBehind
+
+                    InteractWithItem:InvokeServer(
+                        PlayerChar:WaitForChild("Torso")
+                    )
+                    task.wait()
+                    ArrestPlayer:InvokeServer(
+                        ToArrest,
+                        1
+                    ) 
+                    task.wait(0.05)
+                end
+            end
+        end
+    end 
+end
+
+local function ALL_ARREST()
+    while cPlayers.ArrestingAll do
+        for index, PlayerObject in pairs(Players:GetPlayers()) do
+            if PlayerObject.Team == Teams.Criminals then
+                KILL_LP()
+
+                repeat
+                    task.wait()
+                until IS_ALIVE(LocalPlayer)
+                task.wait(2)
+
+                ARREST_CHOSEN_PLR(PlayerObject)
+            end
+        end
+        task.wait()
     end
 end
 
@@ -973,7 +1084,7 @@ Players.PlayerRemoving:Connect(function(RemovingPlayer)
     end
 end)
 
--- Auto Gun Pickup -- 
+-- Auto Gun Pickup & Arrest -- 
 LocalPlayer.CharacterAdded:Connect(function()
     if cMisc.GunPickup then
         task.wait(1)
@@ -993,6 +1104,11 @@ LocalPlayer.CharacterAdded:Connect(function()
             INTERACT_WITH_TEAM_ITEM() 
             LocalRoot.CFrame = OldRootCFrame
         end
+    end
+    if cPlayers.AutoArrest then
+        task.wait(1)
+
+        ARREST_CHOSEN_PLR()
     end
     clear(CurrentGuns)
 end)
@@ -1039,35 +1155,46 @@ do -- Window Section
     })
 
     do -- Start of tab section
-        local section = window:Section({ Title = "--" })
+        local MainSection = window:Section({ Title = "--" })
+        local PlrSection = window:Section({ Title = "Player"})
+        local GunSection = window:Section({ Title = "Guns"})
+        local QoLSection = window:Section({ Title = "Quality of life"})
+        local ScriptSection = window:Section({ Title = "Settings"})
+        local UISection = window:Section({ Title = "UI"})
 
         do -- Make our main tab
-            local tab = section:Tab({
+            local MainTab = MainSection:Tab({
                 Selected = true,
                 Title = "Main Features",
                 Icon = cascade.Symbols.squareStack3dUp,
             })
 
-            local GunFeatures = section:Tab({
+            local PlayerFeatures = PlrSection:Tab({
+                Selected = true,
+                Title = "Player Featrues",
+                Icon = cascade.Symbols.squareStack3dUp,
+            })
+
+            local GunFeatures = GunSection:Tab({
                 Selected = true,
                 Title = "Gun Features",
                 Icon = cascade.Symbols.squareStack3dUp,
             })
 
-            local QoLFeatures = section:Tab({
+            local QoLFeatures = QoLSection:Tab({
                 Selected = true,
                 Title = "QoL Settings",
                 Icon = cascade.Symbols.squareStack3dUp,
             })
 
-            local ScriptSettings = section:Tab({
+            local ScriptSettings = ScriptSection:Tab({
                 Selected = true,
                 Title = "Script Settings",
                 Icon = cascade.Symbols.squareStack3dUp,
             })
 
         do -- Settings Tab
-            local tab = section:Tab({
+            local tab = UISection:Tab({
                 Title = "UI Settings",
                 Icon = cascade.Symbols.squareStack3dUp,
             })
@@ -1197,12 +1324,12 @@ do -- Window Section
         end
 
             do
-                local MainFeatures = tab:PageSection({ Title = "ESP Features" })
-                local form = tab:Form()
+                local MainFeatures = MainTab:PageSection({ Title = "ESP Features" })
+                local form = MainTab:Form()
 
                 -- // MAIN FUNCTIONS \\ -- 
 
-                do 
+                do -- MAIN DO
                     local ToggleRow = form:Row()
                     local PartRow = form:Row()
                     local NameTagRow = form:Row()
@@ -1287,8 +1414,8 @@ do -- Window Section
                             end 
                         })
                     end
-                end
-                    local MainFeatures = tab:PageSection({ Title = "Aimlock Features" })
+
+                    local MainFeatures = MainTab:PageSection({ Title = "Aimlock Features" })
                     local AimlockForm = MainFeatures:Form()
                     local row = AimlockForm:Row()
                     local AutoFireRow = AimlockForm:Row()
@@ -1345,7 +1472,7 @@ do -- Window Section
                         Subtitle = "Select the BasePart that the script will target",
                     })
 
-                    local RagebotTab = tab:PageSection({ Title = "Ragebot Features" })
+                    local RagebotTab = MainTab:PageSection({ Title = "Ragebot Features" })
                     local RageForm = RagebotTab:Form()
                     local RageRow = RageForm:Row()
 
@@ -1365,9 +1492,57 @@ do -- Window Section
                     })
 
 
-                    local MainFeatures = tab:PageSection({ Title = "Silent Aim Features" })
+                    local MainFeatures = MainTab:PageSection({ Title = "Silent Aim Features" })
+                end
                 
-                do
+                do -- PLAYER DO
+                    local PlayerPage = PlayerFeatures:PageSection({ Title = "Arrest Features" })
+                    local PlayerForm = PlayerPage:Form()
+                    local AutoArrestName = PlayerForm:Row()
+                    local AllArrestRow = PlayerForm:Row()
+
+                    -- // AUTO ARREST PLAYER \\ -- 
+                    AutoArrestName:Left():TitleStack({
+                        Title = "Arrest Player",
+                        Subtitle = "Enter player's user/display name to target for arrest!",
+                    })
+
+                    local FireRateTextEnter = AutoArrestName:Right():TextField({
+                        Value = "",
+                        ValueChanged = function(self, value: string)
+                            if value ~= "" then
+                                cPlayers.ArrestName = value
+                                print(cPlayers.ArrestName) 
+                            end
+                        end,
+                    })
+
+                    local ArrestButton = AutoArrestName:Right():Button({
+                        Label = "Arrest",
+                        State = "Primary",
+                        Pushed = function(self)
+                            cPlayers.AutoArrest = true
+                            KILL_LP()
+                        end,
+                    })
+
+                    -- // ARREST ALL \\ -- 
+
+                    AllArrestRow:Left():TitleStack({
+                        Title = "Arrest all criminals",
+                        Subtitle = "Automatically arrests every criminal available.",
+                    })
+
+                    AllArrestRow:Right():Toggle({
+                        Value = cPlayers.ArrestingAll,
+                        ValueChanged = function(self, value: boolean)
+                            cPlayers.ArrestingAll = value
+                            ALL_ARREST()
+                        end 
+                    })
+                end
+
+                do -- GUN DO
                     local GunPage = GunFeatures:PageSection({ Title = "Gun Convience" })
                     local GunForm = GunPage:Form()
                     local AutoReloadGun = GunForm:Row()
@@ -1517,7 +1692,8 @@ do -- Window Section
                     })
 
                 end
-                do
+
+                do -- QOL DO
                     local QoLPpage = QoLFeatures:PageSection({ Title = "Player Advantages" })
                     local QolForm = QoLFeatures:Form()
                     local SprintRow = QolForm:Row()
@@ -1525,7 +1701,7 @@ do -- Window Section
                     local GunPickup = QolForm:Row()
                     local UseKeycard = QolForm:Row()
 
-                     -- // SPRINT \\ -- 
+                    -- // SPRINT \\ -- 
 
                     SprintRow:Left():TitleStack({
                         Title = "Enable Auto-Sprint",
