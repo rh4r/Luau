@@ -25,48 +25,10 @@
         31/05/2026 - List of features implimented:
                                                     + Instance phase
                                                     + Jumpheight keybind
+                                                    + Ragebot
+                                                    + Config saving
                                             
 ]]--
-
--- // Configurations \\ -- 
-local config = {
-    ["Main"] = {
-        ["ESP"] = false,
-        ["ESP_Config"] = {
-            ["Team"] = "All"
-        },
-        ["Sprint"] = false,
-        ["Reload"] = false,
-        ["Swap"] = false
-    },
-    ["Blatant"] = {
-        ["Aimlock"] = {
-            ["Toggle"] = false,
-            ["AimLockPart"] = "Head",
-            ["AimlockKeybind"] = Enum.KeyCode.E
-        },
-        ["Mods"] = {
-            ["Enabled"] = false,
-            ["Weapon"] = "",
-            ["FireRate"] = 999,
-            ["Automatic"] = false,
-        },
-        ["AutoFiring"] = false,
-        ["RageBot"] = {
-            ["Enabled"] = false,
-        }
-    },
-    ["Misc"] = {
-        ["Pickup"] = false,
-        ["GunPickup"] = false,
-        ["PhaseKey"] = Enum.KeyCode.Q,
-        ["HighJumpKey"] = Enum.KeyCode.Z,
-        ["HighHeightValue"] = 40,
-        ["IsPhasing"] = false,
-        ["TeamChange"] = ""
-    },
-    ["Settings"] = {},
-}
 
 -- // Initialization \\ -- 
 
@@ -74,9 +36,9 @@ repeat
     task.wait()
 until game.Loaded
 
+local config
 local cloneref = cloneref or getgenv().cloneref or function(...) return ... end 
 local Services = {}
-local cyn = getgenv()
 
 setmetatable(Services, {
     __index = function(table, key)
@@ -84,12 +46,71 @@ setmetatable(Services, {
     end
 })
 
+local function RETURN_CONFIG_TBL()
+    local Success, Result = pcall(function()
+        return loadstring("return " .. readfile("PrisonConfig.lua"))()
+    end)
+
+    if Success then
+        config = Result
+    else
+        warn("Errored with:", Result)
+    end
+end
+
+if readfile then
+    RETURN_CONFIG_TBL()
+
+    if not config then
+        config = {
+            ["Main"] = {
+                ["ESP"] = false,
+                ["ESP_Config"] = {
+                    ["Team"] = "All"
+                },
+                ["Sprint"] = false,
+                ["Reload"] = false,
+                ["Swap"] = false
+            },
+            ["Blatant"] = {
+                ["Aimlock"] = {
+                    ["Toggle"] = false,
+                    ["AimLockPart"] = "Head",
+                    ["AimlockKeybind"] = Enum.KeyCode.E
+                },
+                ["Mods"] = {
+                    ["Enabled"] = false,
+                    ["Weapon"] = "",
+                    ["FireRate"] = 0.1,
+                    ["Automatic"] = false,
+                    ["Spread"] = false,
+                    ["Range"] = false,
+                },
+                ["AutoFiring"] = false,
+                ["RageBot"] = {
+                    ["Enabled"] = false,
+                    ["AutofireEnabled"] = false
+                }
+            },
+            ["Misc"] = {
+                ["Pickup"] = false,
+                ["GunPickup"] = false,
+                ["PhaseKey"] = Enum.KeyCode.Q,
+                ["HighJumpKey"] = Enum.KeyCode.N,
+                ["HighHeightValue"] = 60,
+                ["IsPhasing"] = false,
+                ["TeamChange"] = ""
+            },
+            ["Settings"] = {},
+        }
+    end
+end
+
 
 local cMain = config.Main
 local cBlatant = config.Blatant
 local cMisc = config.Misc
 local cSettings = config.Settings
-local isMethodHooked = false
 
 local function VALIDATE_OBJECT(ObjectChecking)
     if ObjectChecking then
@@ -145,7 +166,6 @@ local ShootEvent = GunRemotes:WaitForChild("ShootEvent")
 
 local ReloadFunc 
 local ShootFunction
-local CastRay
 
 
 local AcceptedDropNames = {
@@ -166,7 +186,7 @@ local WeaponNames = {
 
 local Spoof = {
     ["UserInputState"] = Enum.UserInputState.Begin,
-    ["UserInputType"] = Enum.UserInputType.MouseButton1,
+    ["UserInputType"] = Enum.UserInputType.Touch,
     ["Position"] = {
         ["X"] = 0,
         ["Y"] = 0,
@@ -232,7 +252,7 @@ local function RETURN_BOX_POS(entity)
     end
 
     local BoxHeight = math.abs(HeadPos.Y - FeetPos.Y)
-    local BoxWidth = BoxHeight / 2
+    local BoxWidth = BoxHeight / 1.6
 
     local BoxPosition = Vector2.new(
         RootPos.X - BoxWidth / 2,
@@ -334,6 +354,8 @@ local function IS_ALIVE(PlayerInst)
         local PlayerHumanoid = PlayerChar:FindFirstChildOfClass("Humanoid") 
         if PlayerHumanoid and PlayerHumanoid.Health > 0 and not PlayerChar:FindFirstChildOfClass("ForceField") then
             return true
+        else
+            return false
         end
     end
 end
@@ -637,18 +659,21 @@ local function CALL_UPDATE_MODS()
                 if type(upvalue) == "table" then
                     for tableindex, tablevalue in pairs(upvalue) do
 
-                        if cBlatant.Mods.Automatic then
+                        if cBlatant.Mods.Automatic and not cBlatant.RageBot.AutofireEnabled then
                             if tableindex == "AutoFire" and not rawget(upvalue, tableindex) == true then
                                 rawset(upvalue, tableindex, true)
                             end
-                            if tableindex == "SlotType" and not rawget(upvalue, tableindex) == "Primary" then
-                                rawset(upvalue, tableindex, "Primary")
-                            end 
                         end
 
-                        if cBlatant.Mods.FireRate ~= 999 then
+                        if cBlatant.Mods.FireRate then
                             if tableindex == "FireRate" then
                                 rawset(upvalue, tableindex, cBlatant.Mods.FireRate)
+                            end
+                        end
+
+                        if cBlatant.Mods.Spread then
+                            if tableindex == "SpreadRadius" then
+                                rawset(upvalue, tablevalue, 0)
                             end
                         end
                     end
@@ -657,7 +682,6 @@ local function CALL_UPDATE_MODS()
         end 
     end
 end
-
 
 local function SETUP_PREMOD()
     if cBlatant.Mods.Enabled then
@@ -715,7 +739,7 @@ local function ENABLE_PHASE()
 
             if LocalToHit then
                 local CreatedDirectionHead = Vector3.new(LocalToHit.CFrame.LookVector.X, LocalToHit.CFrame.LookVector.Y + 2, LocalToHit.CFrame.LookVector.Z * 100)
-                local CreatedDirectionRoot = Vector3.new(LocalRootHit.CFrame.LookVector.X, LocalRootHit.CFrame.LookVector.Y, LocalRootHit.CFrame.LookVector.Z * 100)
+                local CreatedDirectionRoot = Vector3.new(LocalRootHit.CFrame.LookVector.X, LocalRootHit.CFrame.LookVector.Y - 0.25, LocalRootHit.CFrame.LookVector.Z * 100)
 
 
                 local FitlerParams = RaycastParams.new()
@@ -739,7 +763,7 @@ local function ENABLE_PHASE()
 
                     task.spawn(function()
                         HeadNewRay.Instance.CanCollide = false
-                        task.delay(5, function()
+                        task.delay(3, function()
                             HeadNewRay.Instance.CanCollide = true
                         end)
                     end)
@@ -748,7 +772,7 @@ local function ENABLE_PHASE()
 
                     task.spawn(function()
                         RootNewRay.Instance.CanCollide = false
-                        task.delay(5, function()
+                        task.delay(3, function()
                             RootNewRay.Instance.CanCollide = true
                         end)
                     end)
@@ -766,7 +790,6 @@ local function ENABLE_HIGHJUMP()
 
         if LocalHumanoid then
             LocalHumanoid.JumpHeight = 50
-            print("Changed JH")
 
             task.delay(5, function()
                 LocalHumanoid.JumpHeight = 5.5
@@ -776,134 +799,126 @@ local function ENABLE_HIGHJUMP()
 end
 
 local function EQUIP_RANDOM_WEAPON()
-    local LocalChar = RETURN_CHARACTER(LocalPlayer)
-    local LocalBackpack = LocalPlayer.Backpack
+    if cMain.Swap then
+        return
+    elseif not cMain.Swap or cMain.Swap and not RETURN_CHARACTER(LocalPlayer):FindFirstChildOfClass("Tool") then
+        local LocalChar = RETURN_CHARACTER(LocalPlayer)
+        local LocalBackpack = LocalPlayer.Backpack
 
-    if LocalChar then
-        if LocalChar:FindFirstChildOfClass("Tool") and not find(WeaponNames, LocalChar:FindFirstChildOfClass("Tool").Name) then
-            LocalChar:FindFirstChildOfClass("Tool").Paent = LocalBackpack
-        else
-            
-            if LocalBackpack then
+        if LocalChar then
+            if LocalChar:FindFirstChildOfClass("Tool") and not find(WeaponNames, LocalChar:FindFirstChildOfClass("Tool").Name) then
+                LocalChar:FindFirstChildOfClass("Tool").Parent = LocalBackpack
+            elseif LocalChar:FindFirstChildOfClass("Tool") and find(WeaponNames, LocalChar:FindFirstChildOfClass("Tool").Name) then
+                return
+            else
+                if LocalBackpack then
 
-                for index, CurrentWeapon in pairs(LocalBackpack:GetChildren()) do
-                    if find(WeaponNames, CurrentWeapon.Name) then
-                        CurrentWeapon.Parent = LocalChar
+                    for index, CurrentWeapon in pairs(LocalBackpack:GetChildren()) do
+                        if find(WeaponNames, CurrentWeapon.Name) then
+                            CurrentWeapon.Parent = LocalChar
+                        end
                     end
                 end
             end
         end
     end
-    task.wait(0.05)
 end
 
-local function RETURN_CAST_RAY()
-    if CastRay then
-        return
-    else
-        for index, FoundFunction in pairs(getgc(false)) do
-            if type(FoundFunction) == "function" and islclosure(FoundFunction) then
-                local Source = debug.info(FoundFunction, "n")
-                
-                if Source and Source ~= "" and Source ~= "nil" and Source == "castRay" then
-                    CastRay = FoundFunction
-                end
-            end
+
+local function RETURN_SENT_RAY(Instance1, Instance2, FilterInstance)
+    local _, CanBeSeen = Camera:WorldToViewportPoint(Instance1.Position)
+    local RayDistance = (Instance1.Position - Instance2.Position)
+    local BlacklistParams = RaycastParams.new()
+    BlacklistParams.FilterDescendantsInstances = {FilterInstance}
+    BlacklistParams.FilterType = Enum.RaycastFilterType.Exclude
+    
+    if CanBeSeen and Instance1 and Instance2 then
+        local CanDetect = workspace:Raycast(
+            Instance2.Position,
+            RayDistance * 1000,
+            BlacklistParams
+        )
+
+        if CanDetect then
+            return CanDetect
         end
     end
-end
-
-local function RETURN_SPOOF_V2()
-        local ToDoX
-        local ToDoY
-        local ToSendV2
-
-        for index, value in pairs(Spoof.Position) do
-            if index == "X" then
-                ToDoX = value
-            if index == "Y" then
-                ToDoY = value
-            end
-        end
-
-        if ToDoX and ToDoY then
-            ToSendV2 = Vector2.new(ToDoX, ToDoY)
-        end
-        return ToSendV2
-    end
-end
-
-local function HOOK_MOUSELOC_METHOD()
-    local old
-    local ShootSrc = ReplicatedStorage.Scripts.ToolScripts.GunController
-
-    old = hookmetamethod(game, "__index", newcclosure(function(SelfObj, IndexingStr)
-        local CallScript = getcallingscript()
-        
-        if typeof(SelfObj) == "Instance" and IndexingStr == "GetMouseLocation" and CallScript == ShootSrc then
-            warn("Tried to call MouseLocation from ", CallScript)
-
-            local ToReturn = RETURN_SPOOF_V2()
-
-            return ToReturn
-        end
-        return old(SelfObj, IndexingStr)
-    end))
-    print("Hook ran!")
 end
 
 local function DO_RAGEBOT()
-    RETURN_CAST_RAY()
-
-    if not isMethodHooked then 
-        HOOK_MOUSELOC_METHOD()
-        isMethodHooked = true
-    end
+    local FirstRay = nil
+    local PlayerTargetting = nil
+    local LocalChar 
+    local PlayerChar
+    local LocalRoot
+    local PlayerRoot
 
     while cBlatant.RageBot.Enabled do
         task.wait()
 
-        for index, PlayerInstance in pairs(Players:GetPlayers()) do
-            if PlayerInstance ~= LocalPlayer then
-                local PlayerChar = RETURN_CHARACTER(PlayerInstance)
-                local LocalChar = RETURN_CHARACTER(LocalPlayer)
+        if PlayerTargetting == nil and FirstRay == nil then
+            for index, PlayerInstance in pairs(Players:GetPlayers()) do
+                if PlayerInstance ~= LocalPlayer then
+                    PlayerChar = RETURN_CHARACTER(PlayerInstance)
+                    LocalChar = RETURN_CHARACTER(LocalPlayer)
 
-                if PlayerChar and LocalChar and IS_ALIVE(PlayerInstance) and CAN_DAMAGE(PlayerInstance) then
-                    local LocalRoot = RETURN_TARGET_PART(LocalPlayer, "HumanoidRootPart")
-                    local TheirRoot = RETURN_TARGET_PART(PlayerInstance, "HumanoidRootPart")
-                    if TheirRoot and LocalRoot then
-                       local RayDistance = (TheirRoot.Position - LocalRoot.Position)
-                        local BlacklistParams = RaycastParams.new()
-                        BlacklistParams.FilterDescendantsInstances = {LocalChar}
-                        BlacklistParams.FilterType = Enum.RaycastFilterType.Exclude
-                        
-                        if LocalRoot and TheirRoot then
-                            local CanDetect = workspace:Raycast(
-                                LocalRoot.Position,
-                                RayDistance * 1000,
-                                BlacklistParams
-                            )
+                    if PlayerChar and LocalChar and IS_ALIVE(PlayerInstance) and CAN_DAMAGE(PlayerInstance) then
+                        LocalRoot = RETURN_TARGET_PART(LocalPlayer, "Head")
+                        PlayerRoot = RETURN_TARGET_PART(PlayerInstance, cBlatant.Aimlock.AimLockPart)
 
-                            if CanDetect and CanDetect.Instance and CanDetect.Instance:IsDescendantOf(PlayerChar) then
-                                while IS_ALIVE(PlayerInstance) and IS_ALIVE(LocalPlayer) and cBlatant.RageBot.Enabled do
-                                    EQUIP_RANDOM_WEAPON()
-                                    RETURN_SHOOT_FUNC()
+                        if PlayerRoot and LocalRoot then
+                                FirstRay = RETURN_SENT_RAY(PlayerRoot, LocalRoot, LocalChar)
 
-                                    if ShootFunction then
-                                        local TheirLocation = Camera:WorldToScreenPoint(TheirRoot.Position)
-                                        local SpoofPos = Spoof["Position"]
-
-                                        SpoofPos.X = TheirLocation.X
-                                        SpoofPos.Y = TheirLocation.Y
-            
-                                        ShootFunction(Spoof)
-                                        task.wait()
-                                    end
+                                if FirstRay and FirstRay.Instance and FirstRay.Instance:IsDescendantOf(PlayerChar) then
+                                    PlayerTargetting = PlayerInstance
+                                    break
                                 end
                             end
-                        end 
+                        end
                     end
                 end
+        else
+            local TheirRoot = RETURN_TARGET_PART(PlayerTargetting, cBlatant.Aimlock.AimLockPart)
+            local LocalRoot = RETURN_TARGET_PART(LocalPlayer, "Head")
+
+            if IS_ALIVE(PlayerTargetting) and IS_ALIVE(LocalPlayer) and TheirRoot and LocalRoot and FirstRay and FirstRay.Instance and FirstRay.Instance:IsDescendantOf(PlayerChar) then
+                if cBlatant.Mods.Automatic then
+                    cBlatant.RageBot.AutofireEnabled = true
+                end
+
+                EQUIP_RANDOM_WEAPON()
+
+                local LocalChar = RETURN_CHARACTER(LocalPlayer)
+                TheirRoot = RETURN_TARGET_PART(PlayerTargetting, "HumanoidRootPart")
+                LocalRoot = RETURN_TARGET_PART(LocalPlayer, "HumanoidRootPart")
+
+                if not ShootFunction then
+                    RETURN_SHOOT_FUNC()
+                else
+                    local TheirLocation = Camera:WorldToScreenPoint(TheirRoot.Position)
+                    local SpoofPos = Spoof["Position"]
+
+                    SpoofPos.X = TheirLocation.X
+                    SpoofPos.Y = TheirLocation.Y
+
+                    task.spawn(function()
+                        ShootFunction(Spoof)
+                    end)
+                    task.wait(cBlatant.Mods.FireRate)
+                end
+                if TheirRoot and LocalRoot and LocalChar then
+                    FirstRay = RETURN_SENT_RAY(TheirRoot, LocalRoot, LocalChar) 
+                else
+                    FirstRay = nil
+                end
+            elseif not FirstRay or not IS_ALIVE(PlayerTargetting) then
+                PlayerTargetting = nil
+                FirstRay = nil
+            elseif not IS_ALIVE(PlayerTargetting) or not IS_ALIVE(LocalPlayer) then
+                cBlatant.RageBot.AutofireEnabled = false
+            else
+                PlayerTargetting = nil
+                FirstRay = nil
             end
         end
     end
@@ -931,10 +946,14 @@ task.spawn(function()
                         end)
                     end
                     if cMain.Swap then
-                        RETURN_CURRENT_WEAPON_TO_BACKPACK()
-
                         local NextWeapon = FIND_NEXT_GUN()
-                        NextWeapon.Parent = LocalChar
+                        local CurrentWeapon = LocalChar:FindFirstChildOfClass("Tool")
+
+                        if CurrentWeapon and CurrentWeapon:GetAttribute("Local_CurrentAmmo") == 0 then
+                            RETURN_CURRENT_WEAPON_TO_BACKPACK()
+                            task.wait()
+                            NextWeapon.Parent = LocalChar 
+                        end
                     end
                 end
             end
@@ -947,7 +966,6 @@ Players.PlayerRemoving:Connect(function(RemovingPlayer)
     for index, PlrESPTable in pairs(DrawingObjects) do
         if find(PlrESPTable, RemovingPlayer) then
             local DrawingObject = PlrESPTable[2]
-            print("Destroying: ", DrawingObject)
 
             DrawingObject.Visible = false
             DrawingObject:Destroy()
@@ -990,7 +1008,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
     end
     if input.KeyCode == cMisc.HighJumpKey then
         ENABLE_HIGHJUMP()
-        print("Enabled highjump")
     end
 end)
 
@@ -1198,7 +1215,7 @@ do -- Window Section
                     })
 
                     ToggleRow:Right():Toggle({
-                        Value = false,
+                        Value = cMain.ESP,
                         ValueChanged = function(self, value: boolean)
                             cMain.ESP = value
                             PLAYER_ESP()
@@ -1285,7 +1302,7 @@ do -- Window Section
                     })
 
                     row:Right():Toggle({
-                        Value = false,
+                        Value = cBlatant.Aimlock.Toggle,
                         ValueChanged = function(self, value: boolean)
                             cBlatant.Aimlock.Toggle = value
                             AIMLOCK()
@@ -1299,7 +1316,7 @@ do -- Window Section
                     })
 
                     AutoFireRow:Right():Toggle({
-                        Value = false,
+                        Value = cBlatant.AutoFiring,
                         ValueChanged = function(self, value: boolean)
                             cBlatant.AutoFiring = value
                         end 
@@ -1340,12 +1357,13 @@ do -- Window Section
                     })
 
                     RageRow:Right():Toggle({
-                        Value = false,
+                        Value = cBlatant.RageBot.Enabled,
                         ValueChanged = function(self, value: boolean)
                             cBlatant.RageBot.Enabled = value
                             DO_RAGEBOT()
                         end 
                     })
+
 
                     local MainFeatures = tab:PageSection({ Title = "Silent Aim Features" })
                 
@@ -1365,6 +1383,7 @@ do -- Window Section
                     local ModdingForm = RealModPage:Form()
                     local RefreshUpdateRow = ModdingForm:Row()
                     local AutomaticRow = ModdingForm:Row()
+                    local SpreadRow = ModdingForm:Row()
                     local FirerateRow = ModdingForm:Row()
 
                     -- // AUTO RELOAD \\ -- 
@@ -1375,7 +1394,7 @@ do -- Window Section
                     })
 
                     AutoReloadGun:Right():Toggle({
-                        Value = false,
+                        Value = cMain.Reload,
                         ValueChanged = function(self, value: boolean)
                             cMain.Reload = value
                         end 
@@ -1388,7 +1407,7 @@ do -- Window Section
                     })
 
                     AutoSwapGun:Right():Toggle({
-                        Value = false,
+                        Value = cMain.Swap,
                         ValueChanged = function(self, value: boolean)
                             cMain.Swap = value
                         end 
@@ -1403,7 +1422,7 @@ do -- Window Section
                     })
 
                     EnableModdingRow:Right():Toggle({
-                        Value = false,
+                        Value = cBlatant.Mods.Enabled,
                         ValueChanged = function(self, value: boolean)
                             cBlatant.Mods.Enabled = value
                         end 
@@ -1462,7 +1481,7 @@ do -- Window Section
                     })
 
                     AutomaticRow:Right():Toggle({
-                        Value = false,
+                        Value = cBlatant.Mods.Automatic,
                         ValueChanged = function(self, value: boolean)
                             cBlatant.Mods.Automatic = value
                         end 
@@ -1476,11 +1495,25 @@ do -- Window Section
                     local FireRateTextEnter = FirerateRow:Right():TextField({
                         Value = "",
                         ValueChanged = function(self, value: string)
-                            cBlatant.Mods.FireRate = value
+                            cBlatant.Mods.FireRate = tonumber(value)
                         end,
                         TextChanged = function(self, value: string)
                             print("Text changed:", value)
                         end,
+                    })
+
+                    -- // SPREAD \\ -- 
+
+                    SpreadRow:Left():TitleStack({
+                        Title = "Set No-Spread",
+                        Subtitle = "Sets the SpreadRadius to 0",
+                    })
+
+                    SpreadRow:Right():Toggle({
+                        Value = cBlatant.Mods.Spread,
+                        ValueChanged = function(self, value: boolean)
+                            cBlatant.Mods.Spread = value
+                        end 
                     })
 
                 end
@@ -1500,7 +1533,7 @@ do -- Window Section
                     })
 
                     SprintRow:Right():Toggle({
-                        Value = false,
+                        Value = cMain.Sprint,
                         ValueChanged = function(self, value: boolean)
                             cMain.Sprint = value
                             AUTO_SPRINT()
@@ -1519,7 +1552,7 @@ do -- Window Section
                     })
 
                     CollectRow:Right():Toggle({
-                        Value = false,
+                        Value = cMisc.Pickup ,
                         ValueChanged = function(self, value: boolean)
                             cMisc.Pickup = value
                             AUTO_COLLECT()
@@ -1534,7 +1567,7 @@ do -- Window Section
                     })
 
                     GunPickup:Right():Toggle({
-                        Value = false,
+                        Value = cMisc.GunPickup,
                         ValueChanged = function(self, value: boolean)
                             cMisc.GunPickup = value
                         end 
@@ -1658,6 +1691,7 @@ do -- Window Section
                     local ScriptSettingRow = ScriptSettingForm:Row()
                     local ScriptSetRejoin = ScriptSettingForm:Row()
                     local ScriptServerhop = ScriptSettingForm:Row()
+                    local SaveConfigRow = ScriptSettingForm:Row()
 
                     ScriptSettingRow:Left():TitleStack({
                         Title = "Clear all drawing objects",
@@ -1688,6 +1722,8 @@ do -- Window Section
                         end,
                     })
 
+                    -- // SERVERHOP BUTTON \\ -- 
+
                     ScriptServerhop:Left():TitleStack({
                         Title = "Serverhop To Another Server",
                         Subtitle = "Rejoins the current server",
@@ -1708,6 +1744,72 @@ do -- Window Section
                             local NewJobID = JSONDecode.data[math.random(1, table.getn(JSONDecode.data))].id
 
                             TeleportService:TeleportToPlaceInstance(game.PlaceId, NewJobID)
+                        end,
+                    })
+
+                    -- // SAVE CURRENT CONFIG \\ -- 
+                    SaveConfigRow:Left():TitleStack({
+                        Title = "Save Config",
+                        Subtitle = "Stores your current choices and automatically enables them on execute",
+                    })
+
+
+                    local button = SaveConfigRow:Right():Button({
+                        Label = "Save",
+                        State = "Primary",
+                        Pushed = function(self)
+                            -- cba to make this, chatgpt did this admitidely
+
+                            local function serialize(value, indent)
+                                indent = indent or 0
+                                local padding = string.rep("    ", indent)
+
+                                if typeof(value) == "table" then
+                                    local result = "{\n"
+
+                                    for k, v in pairs(value) do
+                                        local key
+
+                                        if type(k) == "string" then
+                                            key = string.format('["%s"]', k)
+                                        else
+                                            key = string.format("[%s]", tostring(k))
+                                        end
+
+                                        result ..= string.rep("    ", indent + 1)
+                                            .. key
+                                            .. " = "
+                                            .. serialize(v, indent + 1)
+                                            .. ",\n"
+                                    end
+
+                                    result ..= padding .. "}"
+                                    return result
+
+                                elseif typeof(value) == "EnumItem" then
+                                    return tostring(value)
+
+                                elseif type(value) == "string" then
+                                    return string.format("%q", value)
+
+                                elseif type(value) == "boolean" or type(value) == "number" then
+                                    return tostring(value)
+
+                                else
+                                    return "nil"
+                                end
+                            end
+
+                            local configString = serialize(config)
+
+                            for index, File in listfiles("") do
+                                if File == "PrisonConfig.lua" then
+                                    delfile(File)
+                                end
+                            end
+
+                            writefile("PrisonConfig.lua", configString)
+                            print("Saved Config File!")
                         end,
                     })
                 end
