@@ -197,7 +197,7 @@ local WeaponNames = {
 
 local Spoof = {
     ["UserInputState"] = Enum.UserInputState.Begin,
-    ["UserInputType"] = Enum.UserInputType.Touch,
+    ["UserInputType"] = Enum.UserInputType.Touch, -- Passing touch means the "shoot" functions thinks we're on a tablet. Because of this, it doesn't use GetMouseLocation.Y and GetMouseLocation.Y to determine the screenpoint of where to shoot, rather trusting the player.
     ["Position"] = {
         ["X"] = 0,
         ["Y"] = 0,
@@ -282,12 +282,26 @@ local function ASSOCIATE_TEAM_TO_COLOR(PlayerInst)
     return ColorToTeam[Team]
 end
 
+local function CHECK_HAS_DRAWING(PlayerInst)
+    local HasInst 
+
+    for index, value in pairs(DrawingObjects) do
+        if value[1] == PlayerInst then
+            HasInst = true
+        end
+    end
+    if not HasInst then
+        HasInst = false
+    end
+    return HasInst
+end
+
 local function PLAYER_ESP()
     if not cMain.ESP then
         DESTROY_DRAWINGS()
     else
         for index, entity in pairs(Players:GetPlayers()) do
-            if entity.Character and entity.Character.HumanoidRootPart then
+            if entity.Character and entity.Character.HumanoidRootPart and not CHECK_HAS_DRAWING() then
                 if cMain.ESP_Config.Team == "Others" then
                     if entity.Team ~= LocalPlayer.Team then
                         local NewSize, BoxPosition, Visible = RETURN_BOX_POS(entity)
